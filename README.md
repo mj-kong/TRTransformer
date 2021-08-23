@@ -1,7 +1,5 @@
 # TRTransformer
 
-A description of this package.
-
 support `Reverse` and `Transcode`
 
 output file format
