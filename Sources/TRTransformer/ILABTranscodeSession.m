@@ -448,9 +448,6 @@ typedef void(^ILABGenerateAssetBlock)(BOOL isSuccess, AVAsset *asset, NSError *e
         
         while ((sample = [assetReaderOutput copyNextSampleBuffer])) {
             CMTime presentationTime = CMSampleBufferGetPresentationTimeStamp(sample);
-            if (weakSelf.showDebug) {
-                NSLog(@"transcode sample presentationTime: %.3f", CMTimeGetSeconds(presentationTime));
-            }
             
             if(assetReader.status == AVAssetReaderStatusFailed) {
                 weakSelf.lastError = [NSError ILABSessionError:ILABSessionErrorAVAssetReaderReading];
@@ -469,7 +466,14 @@ typedef void(^ILABGenerateAssetBlock)(BOOL isSuccess, AVAsset *asset, NSError *e
                 weakSelf.sourceFPS != weakSelf.frameRate &&
                 CMTimeCompare(CMTimeSubtract(presentationTime, lastPresentationTime), frameIntervalTime) == -1) {
                 if (weakSelf.showDebug) {
-                    NSLog(@"transcode skip");
+                    NSLog(@"transcode skip: %.3f", CMTimeGetSeconds(presentationTime));
+                }
+                CFRelease(sample); sample = NULL;
+                continue;
+            }
+            if (CMTimeCompare(CMTimeSubtract(weakSelf.timeRange.duration, weakSelf.timeRange.start), presentationTime) == 0) {
+                if (weakSelf.showDebug) {
+                    NSLog(@"transcode last frame skip: %.3f", CMTimeGetSeconds(presentationTime));
                 }
                 CFRelease(sample); sample = NULL;
                 continue;
@@ -484,17 +488,19 @@ typedef void(^ILABGenerateAssetBlock)(BOOL isSuccess, AVAsset *asset, NSError *e
                     CFRelease(sample); sample = NULL;
                     return;
                 }
+                if (weakSelf.showDebug) {
+                    NSLog(@"transcode appendSampleBuffer: %.3f", CMTimeGetSeconds(presentationTime));
+                }
             } else {
-                [NSThread sleepForTimeInterval:1. / 30.];
+                do {
+                    [NSThread sleepForTimeInterval:1. / 15.];
+                } while (!assetWriterInput.isReadyForMoreMediaData);
             }
 
             if (progressBlock) {
                 [weakSelf updateProgressBlock:progressBlock
                                     operation:@"Transcoding Video"
                                      progress:(CMTimeGetSeconds(presentationTime) / CMTimeGetSeconds(weakSelf.timeRange.duration))];
-            }
-            if (weakSelf.showDebug) {
-                NSLog(@"transcode presentationTime: %.3f", CMTimeGetSeconds(presentationTime));
             }
             CFRelease(sample); sample = NULL;
         }
