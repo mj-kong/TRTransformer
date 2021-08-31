@@ -57,7 +57,7 @@ typedef void(^ILABGenerateAssetBlock)(BOOL isSuccess, AVAsset *asset, NSError *e
             CMTime duration = CMTimeSubtract(timeRange.duration, value);
             timeRange = CMTimeRangeMake(timeRange.start, duration);
         }
-
+        
         self.timeRange = timeRange;
         self.sourceAsset = sourceAsset;
         self.deleteCacheFile = YES;
@@ -480,7 +480,7 @@ typedef void(^ILABGenerateAssetBlock)(BOOL isSuccess, AVAsset *asset, NSError *e
                 CFRelease(sample); sample = NULL;
                 continue;
             }
-            if (CMTimeCompare(CMTimeSubtract(weakSelf.timeRange.duration, weakSelf.timeRange.start), presentationTime) == 0) {
+            if (CMTimeCompare(CMTimeAdd(kCMTimeZero, weakSelf.transcodingVideoAsset.duration), presentationTime) == 0) {
                 if (weakSelf.showDebug) {
                     NSLog(@"transcode last frame skip: %.3f", CMTimeGetSeconds(presentationTime));
                 }
