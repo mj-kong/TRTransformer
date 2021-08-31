@@ -603,10 +603,9 @@ typedef void(^ILABGenerateAssetBlock)(BOOL isSuccess, AVAsset *asset, NSError *e
                             return;
                         }
                     } else {
-                        if (weakSelf.showDebug) {
-                            NSLog(@"reverse wait presentationTime: %f", CMTimeGetSeconds(eventTime));
-                        }
-                        [NSThread sleepForTimeInterval:1. / 30.];
+                        do {
+                            [NSThread sleepForTimeInterval:1. / 15.];
+                        } while (!assetWriterInput.isReadyForMoreMediaData);
                     }
                     
                     missCount++;

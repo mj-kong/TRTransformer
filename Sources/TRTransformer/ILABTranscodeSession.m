@@ -49,6 +49,15 @@ typedef void(^ILABGenerateAssetBlock)(BOOL isSuccess, AVAsset *asset, NSError *e
 -(instancetype)initWithAsset:(AVAsset *)sourceAsset timeRange:(CMTimeRange)timeRange {
     self = [super init];
     if (self) {
+        CMTime endTime = CMTimeAdd(timeRange.start, timeRange.duration);
+        CMTime sourceEndTime = CMTimeAdd(kCMTimeZero, sourceAsset.duration);
+        
+        if (CMTimeCompare(endTime, sourceEndTime) > 0) {
+            CMTime value = CMTimeSubtract(endTime, sourceEndTime);
+            CMTime duration = CMTimeSubtract(timeRange.duration, value);
+            timeRange = CMTimeRangeMake(timeRange.start, duration);
+        }
+
         self.timeRange = timeRange;
         self.sourceAsset = sourceAsset;
         self.deleteCacheFile = YES;
