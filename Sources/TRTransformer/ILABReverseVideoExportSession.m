@@ -228,7 +228,7 @@ typedef void(^ILABGenerateAssetBlock)(BOOL isSuccess, AVAsset *asset, NSError *e
     [self reverseVideoAtDestinationURL:videoDestinationURL
                               progress:progressBlock
                          completeBlock:^(BOOL isSuccess, AVAsset *reversedVideoAsset, NSError *error) {
-        if (!reversedVideoAsset || !weakSelf.reversedAudioAsset) {
+        if (!reversedVideoAsset) {
             if (completeBlock) {
                 completeBlock(NO, error);
             }
@@ -278,12 +278,14 @@ typedef void(^ILABGenerateAssetBlock)(BOOL isSuccess, AVAsset *asset, NSError *e
     compVideoTrack.preferredTransform = videoTrack.preferredTransform;
     
     [compVideoTrack insertTimeRange:CMTimeRangeMake(kCMTimeZero, videoAsset.duration) ofTrack:videoTrack atTime:kCMTimeZero error:nil];
-    [compAudioTrack insertTimeRange:CMTimeRangeMake(kCMTimeZero, audioAsset.duration) ofTrack:audioTrack atTime:kCMTimeZero error:nil];
-    
+    if (audioAsset != nil) {
+        [compAudioTrack insertTimeRange:CMTimeRangeMake(kCMTimeZero, audioAsset.duration) ofTrack:audioTrack atTime:kCMTimeZero error:nil];
+    }
+
     if (self.showDebug) {
         NSLog(@"result -> reversed videoTrack duration: %f, audioTrack duration: %f, duration: %f",
               CMTimeGetSeconds(videoTrack.timeRange.duration),
-              CMTimeGetSeconds(audioTrack.timeRange.duration),
+              CMTimeGetSeconds(audioTrack == nil? kCMTimeZero : audioTrack.timeRange.duration),
               CMTimeGetSeconds(muxComp.duration)
         );
         NSLog(@"result -> source video info: size %@, frameRate (%.3f), estimatedDateRate (%.3f)",

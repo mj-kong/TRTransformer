@@ -246,7 +246,7 @@ typedef void(^ILABGenerateAssetBlock)(BOOL isSuccess, AVAsset *asset, NSError *e
     [self transcodeVideoAtDestinationURL:videoDestinationURL
                                 progress:progressBlock
                            completeBlock:^(BOOL isSuccess, AVAsset *transcodedVideoAsset, NSError *error) {
-        if (!transcodedVideoAsset || !weakSelf.transcodedAudioAsset) {
+        if (!transcodedVideoAsset) {
             if (completeBlock) {
                 completeBlock(NO, error);
             }
@@ -296,12 +296,14 @@ typedef void(^ILABGenerateAssetBlock)(BOOL isSuccess, AVAsset *asset, NSError *e
     compVideoTrack.preferredTransform = videoTrack.preferredTransform;
     
     [compVideoTrack insertTimeRange:CMTimeRangeMake(kCMTimeZero, videoAsset.duration) ofTrack:videoTrack atTime:kCMTimeZero error:nil];
-    [compAudioTrack insertTimeRange:CMTimeRangeMake(kCMTimeZero, audioAsset.duration) ofTrack:audioTrack atTime:kCMTimeZero error:nil];
-    
+    if (audioAsset != nil) {
+        [compAudioTrack insertTimeRange:CMTimeRangeMake(kCMTimeZero, audioAsset.duration) ofTrack:audioTrack atTime:kCMTimeZero error:nil];
+    }
+
     if (self.showDebug) {
         NSLog(@"result -> transcoded videoTrack duration: %.3f, audioTrack duration: %.3f, duration: %.3f, inputed timeRange(start: %.3f, duration: %.3f)",
               CMTimeGetSeconds(videoTrack.timeRange.duration),
-              CMTimeGetSeconds(audioTrack.timeRange.duration),
+              CMTimeGetSeconds(audioTrack == nil? kCMTimeZero : audioTrack.timeRange.duration),
               CMTimeGetSeconds(muxComp.duration),
               CMTimeGetSeconds(self.timeRange.start),
               CMTimeGetSeconds(self.timeRange.duration)
