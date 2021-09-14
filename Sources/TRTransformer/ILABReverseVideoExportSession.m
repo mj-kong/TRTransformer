@@ -27,6 +27,7 @@
 @property (nonatomic, strong) AVAsset * reversingVideoAsset;
 @property (nonatomic, strong) AVAsset * reversedAudioAsset;
 @property (strong, nonatomic) NSDictionary <NSString *, id> * videoOutputSettings;
+@property (nonatomic, strong) AVAssetExportSession * exportSession;
 @end
 
 typedef void(^ILABGenerateAssetBlock)(BOOL isSuccess, AVAsset *asset, NSError *error);
@@ -52,6 +53,7 @@ typedef void(^ILABGenerateAssetBlock)(BOOL isSuccess, AVAsset *asset, NSError *e
     if (self) {
         self.timeRange = timeRange;
         self.sourceAsset = sourceAsset;
+        self.exportSession = nil;
         self.deleteCacheFile = YES;
         self.showDebug = NO;
         self.samplesPerPass = 40;
@@ -300,25 +302,26 @@ typedef void(^ILABGenerateAssetBlock)(BOOL isSuccess, AVAsset *asset, NSError *e
         );
     }
     
-    AVAssetExportSession *exportSession = [AVAssetExportSession exportSessionWithAsset:muxComp presetName:AVAssetExportPresetPassthrough];
-    exportSession.outputURL = destinationURL;
-    exportSession.outputFileType = AVFileTypeQuickTimeMovie;
-    
+    self.exportSession = [AVAssetExportSession exportSessionWithAsset:muxComp presetName:AVAssetExportPresetPassthrough];
+    self.exportSession.outputURL = destinationURL;
+    self.exportSession.shouldOptimizeForNetworkUse = false;
+    self.exportSession.outputFileType = AVFileTypeQuickTimeMovie;
+
     if (progressBlock) {
         [self updateProgressBlock:progressBlock
                         operation:@"Finishing Up"
                          progress:INFINITY];
     }
-    
-    [exportSession exportAsynchronouslyWithCompletionHandler:^{
-        if (exportSession.status != AVAssetExportSessionStatusCompleted) {
-            self.lastError = exportSession.error;
-        }
-        if (self.isCanceled) {
-            self.lastError = [NSError ILABSessionError:ILABSessionErrorUserCancel];
+    __weak typeof(self) weakSelf = self;
+
+    [self.exportSession exportAsynchronouslyWithCompletionHandler:^{
+        if (weakSelf.isCanceled) {
+            weakSelf.lastError = [NSError ILABSessionError:ILABSessionErrorUserCancel];
+        } else if (weakSelf.exportSession.status != AVAssetExportSessionStatusCompleted) {
+            weakSelf.lastError = weakSelf.exportSession.error;
         }
         if (completeBlock) {
-            completeBlock((self.lastError == nil), self.lastError);
+            completeBlock((weakSelf.lastError == nil), weakSelf.lastError);
         }
     }];
 }
@@ -654,6 +657,7 @@ typedef void(^ILABGenerateAssetBlock)(BOOL isSuccess, AVAsset *asset, NSError *e
 -(void)cancelReverseExport {
     dispatch_barrier_sync([[self class] reverseCancelQueue], ^{
         self.isCanceled = YES;
+        [self.exportSession cancelExport];
     });
 }
 
