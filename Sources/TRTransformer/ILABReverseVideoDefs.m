@@ -28,6 +28,12 @@ NSString * const kILABReverseVideoExportSessionErrorDomain = @"kILABReverseVideo
             return [NSError errorWithDomain:kILABReverseVideoExportSessionErrorDomain code:errorStatus userInfo:@{NSLocalizedDescriptionKey: @"User cancel."}];
         case ILABSessionErrorAVAssetReaderReading:
             return [NSError errorWithDomain:kILABReverseVideoExportSessionErrorDomain code:errorStatus userInfo:@{NSLocalizedDescriptionKey: @"Cannot open, this media may be damaged."}];
+        case ILABSessionErrorAVAssetExportSessionCompatibility:
+            return [NSError errorWithDomain:kILABReverseVideoExportSessionErrorDomain code:errorStatus userInfo:@{NSLocalizedDescriptionKey: @"Check error to ensure compatibility"}];
+        case ILABSessionErrorInsertTrack:
+            return [NSError errorWithDomain:kILABReverseVideoExportSessionErrorDomain code:errorStatus userInfo:@{NSLocalizedDescriptionKey: @"Insert AVTrack error."}];
+        case ILABSessionErrorAVAssetExportSessionCreate:
+            return [NSError errorWithDomain:kILABReverseVideoExportSessionErrorDomain code:errorStatus userInfo:@{NSLocalizedDescriptionKey: @"AVAssetExporter create error."}];
 
         case ILABSessionErrorAudioInvalidTrackIndex:
             return [NSError errorWithDomain:kILABReverseVideoExportSessionErrorDomain code:errorStatus userInfo:@{NSLocalizedDescriptionKey: @"The specified track index is invalid."}];

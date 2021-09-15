@@ -287,19 +287,31 @@ typedef void(^ILABGenerateAssetBlock)(BOOL isSuccess, AVAsset *asset, NSError *e
 }
 
 -(void)exportAtDestinationURL:(NSURL *)destinationURL videoAsset:(AVAsset *)videoAsset audioAsset:(AVAsset *)audioAsset progressBlock:(ILABProgressBlock)progressBlock complete:(ILABCompleteBlock)completeBlock {
-    AVMutableComposition *muxComp = [AVMutableComposition composition];
-    
-    AVMutableCompositionTrack *compVideoTrack = [muxComp addMutableTrackWithMediaType:AVMediaTypeVideo preferredTrackID:kCMPersistentTrackID_Invalid];
-    AVMutableCompositionTrack *compAudioTrack = [muxComp addMutableTrackWithMediaType:AVMediaTypeAudio preferredTrackID:kCMPersistentTrackID_Invalid];
     
     AVAssetTrack *videoTrack = [videoAsset tracksWithMediaType:AVMediaTypeVideo].firstObject;
     AVAssetTrack *audioTrack = [audioAsset tracksWithMediaType:AVMediaTypeAudio].firstObject;
+
+    AVMutableComposition *muxComp = [AVMutableComposition composition];
+    
+    AVMutableCompositionTrack *compVideoTrack = [muxComp addMutableTrackWithMediaType:AVMediaTypeVideo
+                                                                     preferredTrackID:kCMPersistentTrackID_Invalid];
+    AVMutableCompositionTrack *compAudioTrack = [muxComp addMutableTrackWithMediaType:AVMediaTypeAudio
+                                                                     preferredTrackID:kCMPersistentTrackID_Invalid];
     
     compVideoTrack.preferredTransform = videoTrack.preferredTransform;
     
-    [compVideoTrack insertTimeRange:CMTimeRangeMake(kCMTimeZero, videoAsset.duration) ofTrack:videoTrack atTime:kCMTimeZero error:nil];
-    if (audioAsset != nil) {
-        [compAudioTrack insertTimeRange:CMTimeRangeMake(kCMTimeZero, audioAsset.duration) ofTrack:audioTrack atTime:kCMTimeZero error:nil];
+    NSError *error = nil;
+    [compVideoTrack insertTimeRange:CMTimeRangeMake(kCMTimeZero, videoAsset.duration)
+                            ofTrack:videoTrack
+                             atTime:kCMTimeZero
+                              error:&error];
+    [compAudioTrack insertTimeRange:CMTimeRangeMake(kCMTimeZero, audioAsset.duration)
+                            ofTrack:audioTrack
+                             atTime:kCMTimeZero
+                              error:&error];
+    if (error != nil) {
+        completeBlock(NO, [NSError ILABSessionError:ILABSessionErrorInsertTrack]);
+        return;
     }
 
     if (self.showDebug) {
@@ -309,40 +321,55 @@ typedef void(^ILABGenerateAssetBlock)(BOOL isSuccess, AVAsset *asset, NSError *e
               CMTimeGetSeconds(muxComp.duration),
               CMTimeGetSeconds(self.timeRange.start),
               CMTimeGetSeconds(self.timeRange.duration)
-        );
+              );
         NSLog(@"result -> source video info: size %@, frameRate (%.3f), estimatedDateRate (%.3f)",
               NSStringFromCGSize(self.sourceSize),
               self.sourceFPS,
               self.sourceEstimatedDataRate
-        );
+              );
         NSLog(@"result -> transcoded video info: size %@ frameRate (%.3f), estimatedDateRate (%.3f)",
               NSStringFromCGSize(videoTrack.naturalSize),
               1.0 / CMTimeGetSeconds(videoTrack.minFrameDuration),
               videoTrack.estimatedDataRate
-        );
-    }
-    
-    self.exportSession = [AVAssetExportSession exportSessionWithAsset:muxComp presetName:AVAssetExportPresetPassthrough];
-    self.exportSession.outputURL = destinationURL;
-    self.exportSession.shouldOptimizeForNetworkUse = false;
-    self.exportSession.outputFileType = AVFileTypeQuickTimeMovie;
-
-    if (progressBlock) {
-        [self updateProgressBlock:progressBlock
-                        operation:@"Finishing Up"
-                         progress:INFINITY];
+              );
     }
     
     __weak typeof(self) weakSelf = self;
-
-    [self.exportSession exportAsynchronouslyWithCompletionHandler:^{
-        if (weakSelf.isCanceled) {
-            weakSelf.lastError = [NSError ILABSessionError:ILABSessionErrorUserCancel];
-        } else if (weakSelf.exportSession.status != AVAssetExportSessionStatusCompleted) {
-            weakSelf.lastError = weakSelf.exportSession.error;
+    
+    NSString *preset = AVAssetExportPresetPassthrough;
+    AVFileType outputType = AVFileTypeQuickTimeMovie;
+    
+    [AVAssetExportSession determineCompatibilityOfExportPreset:preset
+                                                     withAsset:muxComp
+                                                outputFileType:outputType
+                                             completionHandler:^(BOOL compatible) {
+        if (progressBlock) {
+            [weakSelf updateProgressBlock:progressBlock
+                            operation:@"Finishing Up"
+                             progress:INFINITY];
         }
-        if (completeBlock) {
-            completeBlock((weakSelf.lastError == nil), weakSelf.lastError);
+        if (compatible) {
+            weakSelf.exportSession = [AVAssetExportSession exportSessionWithAsset:muxComp
+                                                                       presetName:preset];
+            if (weakSelf.exportSession == nil) {
+                completeBlock(NO, [NSError ILABSessionError:ILABSessionErrorAVAssetExportSessionCreate]);
+                return;
+            }
+            weakSelf.exportSession.outputFileType = outputType;
+            weakSelf.exportSession.outputURL = destinationURL;
+
+            [weakSelf.exportSession exportAsynchronouslyWithCompletionHandler:^{
+                if (weakSelf.isCanceled) {
+                    weakSelf.lastError = [NSError ILABSessionError:ILABSessionErrorUserCancel];
+                } else if (weakSelf.exportSession.status != AVAssetExportSessionStatusCompleted) {
+                    weakSelf.lastError = weakSelf.exportSession.error;
+                }
+                if (completeBlock) {
+                    completeBlock((weakSelf.lastError == nil), weakSelf.lastError);
+                }
+            }];
+        } else {
+            completeBlock(NO, [NSError ILABSessionError:ILABSessionErrorAVAssetExportSessionCompatibility]);
         }
     }];
 }

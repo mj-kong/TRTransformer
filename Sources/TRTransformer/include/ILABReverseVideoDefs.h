@@ -6,18 +6,20 @@
 //
 
 #import <Foundation/Foundation.h>
-#import <UIKit/UIKit.h>
 
 extern NSString * const kILABReverseVideoExportSessionErrorDomain;
 
 typedef enum : NSInteger {
-    ILABSessionErrorMissingOutputURL              = -101,
-    ILABSessionErrorAVAssetReaderStartReading        = -102,
+    ILABSessionErrorMissingOutputURL                = -101,
+    ILABSessionErrorAVAssetReaderStartReading       = -102,
     ILABSessionErrorVideoNoSamples                  = -103,
-    ILABSessionErrorAVAssetWriterStartWriting        = -104,
+    ILABSessionErrorAVAssetWriterStartWriting       = -104,
     ILABSessionErrorVideoUnableToWirteFrame         = -105,
     ILABSessionErrorUserCancel                      = -106,
-    ILABSessionErrorAVAssetReaderReading                   = -107,
+    ILABSessionErrorAVAssetReaderReading            = -107,
+    ILABSessionErrorAVAssetExportSessionCompatibility   = -108,
+    ILABSessionErrorInsertTrack                     = -109,
+    ILABSessionErrorAVAssetExportSessionCreate      = -110,
     
     ILABSessionErrorAudioInvalidTrackIndex          = -201,
     ILABSessionErrorAudioCannotAddInput             = -202,
