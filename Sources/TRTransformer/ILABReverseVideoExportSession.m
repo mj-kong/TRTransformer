@@ -128,7 +128,7 @@ typedef void(^ILABGenerateAssetBlock)(BOOL isSuccess, AVAsset *asset, NSError *e
         weakSelf.sourceDuration = weakSelf.sourceAsset.duration;
         weakSelf.sourceVideoTracks = videos.count;
         weakSelf.sourceAudioTracks = audios.count;
-        weakSelf.sourceFPS = 1.0 / CMTimeGetSeconds(video.minFrameDuration);
+        weakSelf.sourceFPS = video.nominalFrameRate;
         weakSelf.sourceEstimatedDataRate = video.estimatedDataRate;
         weakSelf.sourceTransform = video.preferredTransform;
         
@@ -283,14 +283,19 @@ typedef void(^ILABGenerateAssetBlock)(BOOL isSuccess, AVAsset *asset, NSError *e
     compVideoTrack.preferredTransform = videoTrack.preferredTransform;
     
     NSError *error = nil;
-    [compVideoTrack insertTimeRange:CMTimeRangeMake(kCMTimeZero, videoAsset.duration)
-                            ofTrack:videoTrack
-                             atTime:kCMTimeZero
-                              error:&error];
-    [compAudioTrack insertTimeRange:CMTimeRangeMake(kCMTimeZero, audioAsset.duration)
-                            ofTrack:audioTrack
-                             atTime:kCMTimeZero
-                              error:&error];
+    if (videoTrack != nil) {
+        [compVideoTrack insertTimeRange:CMTimeRangeMake(kCMTimeZero, videoAsset.duration)
+                                ofTrack:videoTrack
+                                 atTime:kCMTimeZero
+                                  error:&error];
+    }
+    if (audioTrack != nil) {
+        [compAudioTrack insertTimeRange:CMTimeRangeMake(kCMTimeZero, audioAsset.duration)
+                                ofTrack:audioTrack
+                                 atTime:kCMTimeZero
+                                  error:&error];
+    }
+
     if (error != nil) {
         completeBlock(NO, [NSError ILABSessionError:ILABSessionErrorInsertTrack]);
         return;
@@ -309,7 +314,7 @@ typedef void(^ILABGenerateAssetBlock)(BOOL isSuccess, AVAsset *asset, NSError *e
         );
         NSLog(@"result -> reversed video info: size %@ frameRate (%.3f), estimatedDateRate (%.3f)",
               NSStringFromCGSize(videoTrack.naturalSize),
-              1.0 / CMTimeGetSeconds(videoTrack.minFrameDuration),
+              videoTrack.nominalFrameRate,
               videoTrack.estimatedDataRate
         );
     }
@@ -619,28 +624,30 @@ typedef void(^ILABGenerateAssetBlock)(BOOL isSuccess, AVAsset *asset, NSError *e
                 }
                 
                 CMTime eventTime = revSampleTimes[frameCount].CMTimeValue;
+                if (weakSelf.showDebug) {
+                    NSLog(@"reverse get presentationTime: %.3f", CMTimeGetSeconds(eventTime));
+                }
                 
                 CVPixelBufferRef imageBufferRef = CMSampleBufferGetImageBuffer((__bridge  CMSampleBufferRef)samples[(samples.count - 1) - i]);
                 
                 BOOL didAppend = NO;
                 NSInteger missCount = 0;
                 while(!didAppend && (missCount <= 45)) {
-                    if (adaptor.assetWriterInput.readyForMoreMediaData) {
-                        if (weakSelf.showDebug) {
-                            NSLog(@"reverse presentationTime: %f", CMTimeGetSeconds(eventTime));
-                        }
-                        didAppend = [adaptor appendPixelBuffer:imageBufferRef withPresentationTime:eventTime];
-                        if (!didAppend) {
-                            weakSelf.lastError = [NSError ILABSessionError:ILABSessionErrorVideoUnableToWirteFrame];
-                            resultsBlock(NO, nil, weakSelf.lastError);
-                            return;
-                        }
-                    } else {
+                    if (!adaptor.assetWriterInput.readyForMoreMediaData) {
                         do {
                             [NSThread sleepForTimeInterval:1. / 15.];
                         } while (!assetWriterInput.isReadyForMoreMediaData);
                     }
-                    
+                    didAppend = [adaptor appendPixelBuffer:imageBufferRef withPresentationTime:eventTime];
+                    if (!didAppend) {
+                        weakSelf.lastError = [NSError ILABSessionError:ILABSessionErrorVideoUnableToWirteFrame];
+                        resultsBlock(NO, nil, weakSelf.lastError);
+                        return;
+                    }
+                    if (weakSelf.showDebug) {
+                        NSLog(@"reverse append presentationTime: %f", CMTimeGetSeconds(eventTime));
+                    }
+
                     missCount++;
                 }
                 frameCount++;
