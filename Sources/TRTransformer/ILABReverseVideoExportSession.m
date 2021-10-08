@@ -28,6 +28,7 @@
 @property (nonatomic, strong) AVAsset * reversedAudioAsset;
 @property (strong, nonatomic) NSDictionary <NSString *, id> * videoOutputSettings;
 @property (nonatomic, strong) AVAssetExportSession * exportSession;
+@property (nonatomic) BOOL isAvailableHDR;
 @end
 
 typedef void(^ILABGenerateAssetBlock)(BOOL isSuccess, AVAsset *asset, NSError *error);
@@ -51,13 +52,27 @@ typedef void(^ILABGenerateAssetBlock)(BOOL isSuccess, AVAsset *asset, NSError *e
 -(instancetype)initWithAsset:(AVAsset *)sourceAsset timeRange:(CMTimeRange)timeRange {
     self = [super init];
     if (self) {
+        CMTime endTime = CMTimeAdd(timeRange.start, timeRange.duration);
+        CMTime sourceEndTime = CMTimeAdd(kCMTimeZero, sourceAsset.duration);
+        
+        if (CMTimeCompare(endTime, sourceEndTime) > 0) {
+            CMTime value = CMTimeSubtract(endTime, sourceEndTime);
+            CMTime duration = CMTimeSubtract(timeRange.duration, value);
+            timeRange = CMTimeRangeMake(timeRange.start, duration);
+        }
+
         self.timeRange = timeRange;
         self.sourceAsset = sourceAsset;
         self.exportSession = nil;
         self.deleteCacheFile = YES;
         self.showDebug = NO;
         self.samplesPerPass = 40;
-        
+        if (@available(iOS 14.0, *)) {
+            self.isAvailableHDR = AVPlayer.eligibleForHDRPlayback;
+        } else {
+            self.isAvailableHDR = NO;
+        }
+
         AVAssetTrack *track = [sourceAsset tracksWithMediaType:AVMediaTypeVideo].firstObject;
         AVMutableComposition *videoComposition = [AVMutableComposition composition];
         AVMutableCompositionTrack *vTrack = [videoComposition
@@ -93,6 +108,22 @@ typedef void(^ILABGenerateAssetBlock)(BOOL isSuccess, AVAsset *asset, NSError *e
         AVVideoHeightKey: @(self.sourceSize.height)
     } mutableCopy];
     
+    if (@available(iOS 14.0, *)) {
+        if (self.isAvailableHDR) {
+            NSDictionary *colorProperties = @{
+                AVVideoColorPrimariesKey: AVVideoColorPrimaries_ITU_R_2020,
+                AVVideoTransferFunctionKey: AVVideoTransferFunction_ITU_R_2100_HLG,
+                AVVideoYCbCrMatrixKey: AVVideoYCbCrMatrix_ITU_R_2020
+            };
+            [settings setObject:AVVideoCodecTypeHEVC
+                         forKey:AVVideoCodecKey];
+            [settings setObject:(__bridge NSString*)kVTProfileLevel_HEVC_Main10_AutoLevel
+                         forKey:AVVideoProfileLevelKey];
+            [settings setObject:colorProperties
+                         forKey:AVVideoColorPropertiesKey];
+        }
+    }
+
     NSMutableDictionary *compressProps = [NSMutableDictionary new];
     compressProps[AVVideoAverageBitRateKey] = @(self.sourceEstimatedDataRate);
     if (self.sourceSize.width * self.sourceSize.height > fullHDProportion) {
@@ -102,6 +133,11 @@ typedef void(^ILABGenerateAssetBlock)(BOOL isSuccess, AVAsset *asset, NSError *e
     } else {
         compressProps[AVVideoAllowFrameReorderingKey] = @(NO);
         compressProps[AVVideoProfileLevelKey] = AVVideoProfileLevelH264MainAutoLevel;
+    }
+    if (@available(iOS 14.0, *)) {
+        if (self.isAvailableHDR) {
+            compressProps[(__bridge NSString*)kVTCompressionPropertyKey_HDRMetadataInsertionMode] = (__bridge NSString*)kVTHDRMetadataInsertionMode_Auto;
+        }
     }
     settings[AVVideoCompressionPropertiesKey] = compressProps;
     
@@ -465,6 +501,14 @@ typedef void(^ILABGenerateAssetBlock)(BOOL isSuccess, AVAsset *asset, NSError *e
         NSInteger localCount = 0;
         while ((sample = [assetReaderOutput copyNextSampleBuffer])) {
             CMTime presentationTime = CMSampleBufferGetPresentationTimeStamp(sample);
+            if (CMTimeCompare(CMTimeAdd(kCMTimeZero, weakSelf.reversingVideoAsset.duration), presentationTime) == 0) {
+                if (weakSelf.showDebug) {
+                    NSLog(@"reverse last frame skip: %.3f", CMTimeGetSeconds(presentationTime));
+                }
+                CFRelease(sample); sample = NULL;
+                continue;
+            }
+
             [revSampleTimes addObject:[NSValue valueWithCMTime:presentationTime]];
             
             if ([weakSelf isCanceledReverseExport]) {
@@ -624,9 +668,6 @@ typedef void(^ILABGenerateAssetBlock)(BOOL isSuccess, AVAsset *asset, NSError *e
                 }
                 
                 CMTime eventTime = revSampleTimes[frameCount].CMTimeValue;
-                if (weakSelf.showDebug) {
-                    NSLog(@"reverse get presentationTime: %.3f", CMTimeGetSeconds(eventTime));
-                }
                 
                 CVPixelBufferRef imageBufferRef = CMSampleBufferGetImageBuffer((__bridge  CMSampleBufferRef)samples[(samples.count - 1) - i]);
                 
