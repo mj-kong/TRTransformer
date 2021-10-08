@@ -25,9 +25,11 @@
 @property (nonatomic, strong) AVAsset * sourceAsset;
 @property (nonatomic, strong) AVAsset * transcodingVideoAsset;
 @property (nonatomic, strong) AVAsset * transcodedAudioAsset;
-@property (nonatomic, strong) NSDictionary <NSString *, id> * videoOutputSettings;
 @property (nonatomic, strong) AVAssetExportSession * exportSession;
-@property (nonatomic) BOOL isAvailableHDR;
+
+@property (nonatomic) BOOL availableHDR;
+@property (nonatomic, readonly) NSDictionary <NSString *, id> * videoOutputSettings;
+@property (nonatomic, readonly) NSDictionary <NSString *, id> * videoCompressionProperties;
 @end
 
 typedef void(^ILABGenerateAssetBlock)(BOOL isSuccess, AVAsset *asset, NSError *error);
@@ -65,12 +67,7 @@ typedef void(^ILABGenerateAssetBlock)(BOOL isSuccess, AVAsset *asset, NSError *e
         self.exportSession = nil;
         self.deleteCacheFile = YES;
         self.showDebug = NO;
-        if (@available(iOS 14.0, *)) {
-            self.isAvailableHDR = AVPlayer.eligibleForHDRPlayback;
-        } else {
-            self.isAvailableHDR = NO;
-        }
-        
+
         AVAssetTrack *track = [sourceAsset tracksWithMediaType:AVMediaTypeVideo].firstObject;
         AVMutableComposition *videoComposition = [AVMutableComposition composition];
         AVMutableCompositionTrack *vTrack = [videoComposition
@@ -80,6 +77,15 @@ typedef void(^ILABGenerateAssetBlock)(BOOL isSuccess, AVAsset *asset, NSError *e
         self.transcodingVideoAsset = videoComposition;
         
         [self configureSourceMeta];
+
+        if (@available(iOS 14.0, *)) {
+            if (AVPlayer.eligibleForHDRPlayback &&
+                [track hasMediaCharacteristic:AVMediaCharacteristicContainsHDRVideo]) {
+                self.availableHDR = YES;
+            }
+        } else {
+            self.availableHDR = NO;
+        }
         self.size = self.sourceSize;
         self.frameRate = self.sourceFPS;
     }
@@ -98,17 +104,56 @@ typedef void(^ILABGenerateAssetBlock)(BOOL isSuccess, AVAsset *asset, NSError *e
     return session;
 }
 
-- (NSDictionary *)videoSettings {
+-(NSDictionary *)videoCompressionProperties {
     static const NSInteger fullHDProportion = 1920 * 1080;
-        
-    NSMutableDictionary *settings = [@{
-        AVVideoCodecKey: AVVideoCodecH264,
-        AVVideoWidthKey: @(self.size.width),
-        AVVideoHeightKey: @(self.size.height)
-    } mutableCopy];
     
+    Float64 bitrate = ((self.size.width * self.size.height * self.frameRate * 0.17) / 1024) * 1000;
+    NSMutableDictionary *settings = [NSMutableDictionary dictionary];
+    
+    [settings setObject:@(self.estimatedDataRate == 0 ? bitrate : self.estimatedDataRate)
+                 forKey:AVVideoAverageBitRateKey];
+    [settings setObject:self.sourceSize.width * self.sourceSize.height > fullHDProportion ? @(YES) : @(NO)
+                 forKey:AVVideoAllowFrameReorderingKey];
     if (@available(iOS 14.0, *)) {
-        if (self.isAvailableHDR) {
+        if (self.availableHDR) {
+            [settings setObject:(__bridge NSString*)kVTHDRMetadataInsertionMode_Auto
+                         forKey:(__bridge NSString*)kVTCompressionPropertyKey_HDRMetadataInsertionMode];
+            [settings setObject:(__bridge NSString*)kVTProfileLevel_HEVC_Main10_AutoLevel
+                         forKey:AVVideoProfileLevelKey];
+        } else {
+            if (self.sourceSize.width * self.sourceSize.height > fullHDProportion) {
+                [settings setObject:AVVideoProfileLevelH264HighAutoLevel
+                             forKey:AVVideoProfileLevelKey];
+                [settings setObject:AVVideoH264EntropyModeCABAC
+                             forKey:AVVideoH264EntropyModeKey];
+            } else {
+                [settings setObject:AVVideoProfileLevelH264MainAutoLevel
+                             forKey:AVVideoProfileLevelKey];
+            }
+        }
+    } else {
+        if (self.sourceSize.width * self.sourceSize.height > fullHDProportion) {
+            [settings setObject:AVVideoProfileLevelH264HighAutoLevel
+                         forKey:AVVideoProfileLevelKey];
+            [settings setObject:AVVideoH264EntropyModeCABAC
+                         forKey:AVVideoH264EntropyModeKey];
+        } else {
+            [settings setObject:AVVideoProfileLevelH264MainAutoLevel
+                         forKey:AVVideoProfileLevelKey];
+        }
+    }
+    return settings;
+}
+
+-(NSDictionary *)videoOutputSettings {
+    NSMutableDictionary *settings = [NSMutableDictionary dictionary];
+    
+    [settings setObject:@(self.sourceSize.width)
+                 forKey:AVVideoWidthKey];
+    [settings setObject:@(self.sourceSize.height)
+                 forKey:AVVideoHeightKey];
+    if (@available(iOS 14.0, *)) {
+        if (self.availableHDR) {
             NSDictionary *colorProperties = @{
                 AVVideoColorPrimariesKey: AVVideoColorPrimaries_ITU_R_2020,
                 AVVideoTransferFunctionKey: AVVideoTransferFunction_ITU_R_2100_HLG,
@@ -116,35 +161,23 @@ typedef void(^ILABGenerateAssetBlock)(BOOL isSuccess, AVAsset *asset, NSError *e
             };
             [settings setObject:AVVideoCodecTypeHEVC
                          forKey:AVVideoCodecKey];
-            [settings setObject:(__bridge NSString*)kVTProfileLevel_HEVC_Main10_AutoLevel
-                         forKey:AVVideoProfileLevelKey];
             [settings setObject:colorProperties
                          forKey:AVVideoColorPropertiesKey];
+        } else {
+            [settings setObject:AVVideoCodecH264
+                         forKey:AVVideoCodecKey];
         }
-    }
-
-    NSMutableDictionary *compressProps = [NSMutableDictionary new];
-    Float64 bitrate = ((self.size.width * self.size.height * self.frameRate * 0.17) / 1024) * 1000;
-    compressProps[AVVideoAverageBitRateKey] = @(self.estimatedDataRate == 0 ? bitrate : self.estimatedDataRate);
-    if (self.size.width * self.size.height > fullHDProportion) {
-        compressProps[AVVideoAllowFrameReorderingKey] = @(YES);
-        compressProps[AVVideoProfileLevelKey] = AVVideoProfileLevelH264HighAutoLevel;
-        compressProps[AVVideoH264EntropyModeKey] = AVVideoH264EntropyModeCABAC;
     } else {
-        compressProps[AVVideoAllowFrameReorderingKey] = @(NO);
-        compressProps[AVVideoProfileLevelKey] = AVVideoProfileLevelH264MainAutoLevel;
+        [settings setObject:AVVideoCodecH264
+                     forKey:AVVideoCodecKey];
     }
-    if (@available(iOS 14.0, *)) {
-        if (self.isAvailableHDR) {
-            compressProps[(__bridge NSString*)kVTCompressionPropertyKey_HDRMetadataInsertionMode] = (__bridge NSString*)kVTHDRMetadataInsertionMode_Auto;
-        }
-    }
-    settings[AVVideoCompressionPropertiesKey] = compressProps;
-    
+    [settings setObject:self.videoCompressionProperties
+                 forKey:AVVideoCompressionPropertiesKey];
+
     return settings;
 }
 
-- (void)configureSourceMeta {
+-(void)configureSourceMeta {
     dispatch_semaphore_t loadSemi = dispatch_semaphore_create(0);
     __weak typeof(self) weakSelf = self;
     [self.sourceAsset loadValuesAsynchronouslyForKeys:@[@"duration", @"tracks", @"metadata"]
@@ -182,22 +215,19 @@ typedef void(^ILABGenerateAssetBlock)(BOOL isSuccess, AVAsset *asset, NSError *e
     }
 }
 
-- (void)setSize:(CGSize)size {
+-(void)setSize:(CGSize)size {
     _size = size;
-    self.videoOutputSettings = [self videoSettings];
 }
 
-- (void)setEstimatedDataRate:(CGFloat)estimatedDataRate {
+-(void)setEstimatedDataRate:(CGFloat)estimatedDataRate {
     _estimatedDataRate = estimatedDataRate;
-    self.videoOutputSettings = [self videoSettings];
 }
 
-- (void)setFrameRate:(CGFloat)frameRate {
+-(void)setFrameRate:(CGFloat)frameRate {
     _frameRate = frameRate;
     if (self.sourceFPS < frameRate) {
         _frameRate = self.sourceFPS;
     }
-    self.videoOutputSettings = [self videoSettings];
 }
 
 #pragma mark - Queue
@@ -253,7 +283,11 @@ typedef void(^ILABGenerateAssetBlock)(BOOL isSuccess, AVAsset *asset, NSError *e
             return;
         }
     }
-    
+    if (self.showDebug) {
+        if (self.availableHDR) {
+            NSLog(@"transcode availableHDR: YES");
+        }
+    }
     __weak typeof(self) weakSelf = self;
     dispatch_async([[self class] transcodeQueue], ^{
         [weakSelf doTranscode:progressBlock complete:completeBlock];
