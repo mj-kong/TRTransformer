@@ -148,9 +148,9 @@ typedef void(^ILABGenerateAssetBlock)(BOOL isSuccess, AVAsset *asset, NSError *e
 -(NSDictionary *)videoOutputSettings {
     NSMutableDictionary *settings = [NSMutableDictionary dictionary];
     
-    [settings setObject:@(self.sourceSize.width)
+    [settings setObject:@(self.size.width)
                  forKey:AVVideoWidthKey];
-    [settings setObject:@(self.sourceSize.height)
+    [settings setObject:@(self.size.height)
                  forKey:AVVideoHeightKey];
     if (@available(iOS 14.0, *)) {
         if (self.availableHDR) {
