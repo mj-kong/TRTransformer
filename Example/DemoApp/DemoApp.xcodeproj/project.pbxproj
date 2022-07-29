@@ -32,7 +32,6 @@
 		2F0226FC2893A90300B84E92 /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/LaunchScreen.storyboard; sourceTree = "<group>"; };
 		2F0226FE2893A90300B84E92 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		2F0226FF2893A90300B84E92 /* main.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = main.m; sourceTree = "<group>"; };
-		2F02270E2893AA5700B84E92 /* TRTransformer */ = {isa = PBXFileReference; lastKnownFileType = wrapper; name = TRTransformer; path = ../..; sourceTree = "<group>"; };
 		475A9E98FF155B2BF4E5329B /* Pods-DemoApp.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-DemoApp.release.xcconfig"; path = "Target Support Files/Pods-DemoApp/Pods-DemoApp.release.xcconfig"; sourceTree = "<group>"; };
 		59F6F267C843C7BF0364DE12 /* Pods-DemoApp.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-DemoApp.debug.xcconfig"; path = "Target Support Files/Pods-DemoApp/Pods-DemoApp.debug.xcconfig"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -53,7 +52,6 @@
 		2F0226E12893A90200B84E92 = {
 			isa = PBXGroup;
 			children = (
-				2F02270E2893AA5700B84E92 /* TRTransformer */,
 				2F0226EC2893A90200B84E92 /* DemoApp */,
 				2F0226EB2893A90200B84E92 /* Products */,
 				D966D8631C2AAE75AEF1121F /* Pods */,
@@ -101,7 +99,6 @@
 				59F6F267C843C7BF0364DE12 /* Pods-DemoApp.debug.xcconfig */,
 				475A9E98FF155B2BF4E5329B /* Pods-DemoApp.release.xcconfig */,
 			);
-			name = Pods;
 			path = Pods;
 			sourceTree = "<group>";
 		};
@@ -448,8 +445,8 @@
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/mj-kong/TRTransformer";
 			requirement = {
-				kind = exactVersion;
-				version = 1.11.0;
+				kind = upToNextMajorVersion;
+				minimumVersion = 1.12.0;
 			};
 		};
 /* End XCRemoteSwiftPackageReference section */

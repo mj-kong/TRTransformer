@@ -1,0 +1,14 @@
+{
+  "pins" : [
+    {
+      "identity" : "trtransformer",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/mj-kong/TRTransformer",
+      "state" : {
+        "revision" : "29dc2fad0b3cb4819b0e74e68507581241769edc",
+        "version" : "1.12.0"
+      }
+    }
+  ],
+  "version" : 2
+}
