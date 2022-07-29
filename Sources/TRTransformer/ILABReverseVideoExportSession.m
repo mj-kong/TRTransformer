@@ -537,6 +537,10 @@ typedef void(^ILABGenerateAssetBlock)(BOOL isSuccess, AVAsset *asset, NSError *e
         NSInteger localCount = 0;
         while ((sample = [assetReaderOutput copyNextSampleBuffer])) {
             CMTime presentationTime = CMSampleBufferGetPresentationTimeStamp(sample);
+            if (weakSelf.showDebug) {
+                NSLog(@"configure presentation time: %f", CMTimeGetSeconds(presentationTime));
+            }
+
             if (CMTimeCompare(CMTimeAdd(kCMTimeZero, weakSelf.reversingVideoAsset.duration), presentationTime) == 0) {
                 if (weakSelf.showDebug) {
                     NSLog(@"reverse last frame skip: %.3f", CMTimeGetSeconds(presentationTime));
@@ -566,6 +570,15 @@ typedef void(^ILABGenerateAssetBlock)(BOOL isSuccess, AVAsset *asset, NSError *e
             localCount++;
         }
         
+        if(assetReader.status == AVAssetReaderStatusFailed) {
+            if (weakSelf.showDebug) {
+                NSLog(@"%@", assetReader.error.localizedDescription);
+            }
+            weakSelf.lastError = [NSError ILABSessionError:ILABSessionErrorAVAssetReaderReading];
+            resultsBlock(NO, nil, weakSelf.lastError);
+            return;
+        }
+
         // No samples, no bueno
         if (revSampleTimes.count == 0) {
             weakSelf.lastError = [NSError ILABSessionError:ILABSessionErrorVideoNoSamples];
@@ -680,16 +693,6 @@ typedef void(^ILABGenerateAssetBlock)(BOOL isSuccess, AVAsset *asset, NSError *e
             frameStartIndex = [dict[@"frameStartIndex"] longValue];
             frameEndIndex = [dict[@"frameEndIndex"] longValue];
             
-            while((sample = [assetReaderOutput copyNextSampleBuffer])) {
-                CFRelease(sample);
-            }
-            
-            if(assetReader.status == AVAssetReaderStatusFailed) {
-                weakSelf.lastError = [NSError ILABSessionError:ILABSessionErrorAVAssetReaderReading];
-                resultsBlock(NO, nil, weakSelf.lastError);
-                return;
-            }
-            
             [assetReaderOutput resetForReadingTimeRanges:@[[NSValue valueWithCMTimeRange:CMTimeRangeMake(passStartTime, passDuration)]]];
             
             NSMutableArray *samples = [NSMutableArray new];
@@ -698,6 +701,15 @@ typedef void(^ILABGenerateAssetBlock)(BOOL isSuccess, AVAsset *asset, NSError *e
                 CFRelease(sample);
             }
             
+            if(assetReader.status == AVAssetReaderStatusFailed) {
+                if (weakSelf.showDebug) {
+                    NSLog(@"%@", assetReader.error.localizedDescription);
+                }
+                weakSelf.lastError = [NSError ILABSessionError:ILABSessionErrorAVAssetReaderReading];
+                resultsBlock(NO, nil, weakSelf.lastError);
+                return;
+            }
+
             for(NSInteger i=0; i<samples.count; i++) {
                 if (frameCount >= revSampleTimes.count) {
                     break;

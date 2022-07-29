@@ -27,7 +27,7 @@ NSString * const kILABReverseVideoExportSessionErrorDomain = @"kILABReverseVideo
         case ILABSessionErrorUserCancel:
             return [NSError errorWithDomain:kILABReverseVideoExportSessionErrorDomain code:errorStatus userInfo:@{NSLocalizedDescriptionKey: @"User cancel."}];
         case ILABSessionErrorAVAssetReaderReading:
-            return [NSError errorWithDomain:kILABReverseVideoExportSessionErrorDomain code:errorStatus userInfo:@{NSLocalizedDescriptionKey: @"Cannot open, this media may be damaged."}];
+            return [NSError errorWithDomain:kILABReverseVideoExportSessionErrorDomain code:errorStatus userInfo:@{NSLocalizedDescriptionKey: @"Cannot decode."}];
         case ILABSessionErrorAVAssetExportSessionCompatibility:
             return [NSError errorWithDomain:kILABReverseVideoExportSessionErrorDomain code:errorStatus userInfo:@{NSLocalizedDescriptionKey: @"Check error to ensure compatibility"}];
         case ILABSessionErrorInsertTrack:
