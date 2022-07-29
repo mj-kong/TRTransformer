@@ -1,0 +1,6 @@
+framework module OHQBImagePicker {
+  umbrella header "OHQBImagePicker-umbrella.h"
+
+  export *
+  module * { export * }
+}

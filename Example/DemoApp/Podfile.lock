@@ -1,0 +1,20 @@
+PODS:
+  - M13ProgressSuite (1.2.9)
+  - OHQBImagePicker (1.0.14)
+
+DEPENDENCIES:
+  - M13ProgressSuite
+  - OHQBImagePicker
+
+SPEC REPOS:
+  trunk:
+    - M13ProgressSuite
+    - OHQBImagePicker
+
+SPEC CHECKSUMS:
+  M13ProgressSuite: ea9f7263e73e9215e6849dfa54e29ee0ad6a145c
+  OHQBImagePicker: 59f1d723219cfc30910be9b41f23d23ccce24706
+
+PODFILE CHECKSUM: d9005f68020a0e83df2e89b64f5ca6fe81abc718
+
+COCOAPODS: 1.11.3
