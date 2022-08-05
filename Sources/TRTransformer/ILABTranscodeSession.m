@@ -28,8 +28,6 @@
 @property (nonatomic, strong) AVAssetExportSession * exportSession;
 
 @property (nonatomic) BOOL availableHDR;
-@property (nonatomic, readonly) NSDictionary <NSString *, id> * videoOutputSettings;
-@property (nonatomic, readonly) NSDictionary <NSString *, id> * videoCompressionProperties;
 @end
 
 typedef void(^ILABGenerateAssetBlock)(BOOL isSuccess, AVAsset *asset, NSError *error);
@@ -141,6 +139,23 @@ typedef void(^ILABGenerateAssetBlock)(BOOL isSuccess, AVAsset *asset, NSError *e
             [settings setObject:AVVideoProfileLevelH264MainAutoLevel
                          forKey:AVVideoProfileLevelKey];
         }
+    }
+    return settings;
+}
+
+-(NSDictionary *)videoReaderSettings {
+    NSMutableDictionary *settings = [NSMutableDictionary dictionary];
+    if (@available(iOS 14.0, *)) {
+        if (self.availableHDR) {
+            [settings setObject:@(kCVPixelFormatType_420YpCbCr10BiPlanarVideoRange)
+                         forKey:(NSString *)kCVPixelBufferPixelFormatTypeKey];
+        } else {
+            [settings setObject:@(kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange)
+                         forKey:(NSString *)kCVPixelBufferPixelFormatTypeKey];
+        }
+    } else {
+        [settings setObject:@(kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange)
+                     forKey:(NSString *)kCVPixelBufferPixelFormatTypeKey];
     }
     return settings;
 }
@@ -508,7 +523,7 @@ typedef void(^ILABGenerateAssetBlock)(BOOL isSuccess, AVAsset *asset, NSError *e
         }
         AVAssetReaderTrackOutput *assetReaderOutput = [AVAssetReaderTrackOutput
                                                        assetReaderTrackOutputWithTrack:[weakSelf.transcodingVideoAsset tracksWithMediaType:AVMediaTypeVideo].firstObject
-                                                       outputSettings:@{ (NSString *)kCVPixelBufferPixelFormatTypeKey: @(kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange) }];
+                                                       outputSettings:weakSelf.videoReaderSettings];
         assetReaderOutput.supportsRandomAccess = YES;
         [assetReader addOutput:assetReaderOutput];
         
@@ -609,10 +624,16 @@ typedef void(^ILABGenerateAssetBlock)(BOOL isSuccess, AVAsset *asset, NSError *e
             }
             CFRelease(sample); sample = NULL;
         }
-        if (sample != NULL) {
-            CFRelease(sample); sample = NULL;
+
+        if(assetReader.status == AVAssetReaderStatusFailed) {
+            if (weakSelf.showDebug) {
+                NSLog(@"%@", assetReader.error.localizedDescription);
+            }
+            weakSelf.lastError = [NSError ILABSessionError:ILABSessionErrorAVAssetReaderReading];
+            completeBlock(NO, nil, weakSelf.lastError);
+            return;
         }
-        
+
         [assetWriterInput markAsFinished];
         
         if ([self isCanceledTranscodeExport]) {

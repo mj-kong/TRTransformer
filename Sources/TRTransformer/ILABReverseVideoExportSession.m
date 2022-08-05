@@ -29,8 +29,6 @@
 @property (nonatomic, strong) AVAssetExportSession * exportSession;
 
 @property (nonatomic) BOOL availableHDR;
-@property (nonatomic, readonly) NSDictionary <NSString *, id> * videoOutputSettings;
-@property (nonatomic, readonly) NSDictionary <NSString *, id> * videoCompressionProperties;
 @end
 
 typedef void(^ILABGenerateAssetBlock)(BOOL isSuccess, AVAsset *asset, NSError *error);
@@ -146,8 +144,18 @@ typedef void(^ILABGenerateAssetBlock)(BOOL isSuccess, AVAsset *asset, NSError *e
 
 -(NSDictionary *)videoReaderSettings {
     NSMutableDictionary *settings = [NSMutableDictionary dictionary];
-    [settings setObject:@(kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange)
-                 forKey:(NSString *)kCVPixelBufferPixelFormatTypeKey];
+    if (@available(iOS 14.0, *)) {
+        if (self.availableHDR) {
+            [settings setObject:@(kCVPixelFormatType_420YpCbCr10BiPlanarVideoRange)
+                         forKey:(NSString *)kCVPixelBufferPixelFormatTypeKey];
+        } else {
+            [settings setObject:@(kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange)
+                         forKey:(NSString *)kCVPixelBufferPixelFormatTypeKey];
+        }
+    } else {
+        [settings setObject:@(kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange)
+                     forKey:(NSString *)kCVPixelBufferPixelFormatTypeKey];
+    }
     return settings;
 }
 
@@ -561,8 +569,7 @@ typedef void(^ILABGenerateAssetBlock)(BOOL isSuccess, AVAsset *asset, NSError *e
             if ([weakSelf isCanceledReverseExport]) {
                 weakSelf.lastError = [NSError ILABSessionError:ILABSessionErrorUserCancel];
                 resultsBlock(NO, nil, weakSelf.lastError);
-                CFRelease(sample);
-                sample = NULL;
+                CFRelease(sample); sample = NULL;
                 return;
             }
             if (progressBlock) {
@@ -570,10 +577,7 @@ typedef void(^ILABGenerateAssetBlock)(BOOL isSuccess, AVAsset *asset, NSError *e
                                     operation:@"Analyzing Source Video"
                                      progress:(CMTimeGetSeconds(presentationTime) / CMTimeGetSeconds(weakSelf.sourceDuration)) * 0.5];
             }
-            
-            CFRelease(sample);
-            sample = NULL;
-            
+            CFRelease(sample); sample = NULL;
             localCount++;
         }
         
@@ -708,6 +712,10 @@ typedef void(^ILABGenerateAssetBlock)(BOOL isSuccess, AVAsset *asset, NSError *e
 
             NSMutableArray *samples = [NSMutableArray new];
             while((sample = [assetReaderOutput copyNextSampleBuffer])) {
+                if (weakSelf.showDebug) {
+                    CMTime presentationTime = CMSampleBufferGetPresentationTimeStamp(sample);
+                    NSLog(@"copy presentationTime: %f", CMTimeGetSeconds(presentationTime));
+                }
                 [samples addObject:(__bridge id)sample];
                 CFRelease(sample);
             }
