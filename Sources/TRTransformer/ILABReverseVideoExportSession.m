@@ -144,6 +144,13 @@ typedef void(^ILABGenerateAssetBlock)(BOOL isSuccess, AVAsset *asset, NSError *e
     return settings;
 }
 
+-(NSDictionary *)videoReaderSettings {
+    NSMutableDictionary *settings = [NSMutableDictionary dictionary];
+    [settings setObject:@(kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange)
+                 forKey:(NSString *)kCVPixelBufferPixelFormatTypeKey];
+    return settings;
+}
+
 -(NSDictionary *)videoOutputSettings {
     NSMutableDictionary *settings = [NSMutableDictionary dictionary];
     
@@ -521,7 +528,7 @@ typedef void(^ILABGenerateAssetBlock)(BOOL isSuccess, AVAsset *asset, NSError *e
         // Setup the reader output
         AVAssetReaderTrackOutput *assetReaderOutput = [AVAssetReaderTrackOutput
                                                        assetReaderTrackOutputWithTrack:[weakSelf.reversingVideoAsset tracksWithMediaType:AVMediaTypeVideo].firstObject
-                                                       outputSettings:@{ (NSString *)kCVPixelBufferPixelFormatTypeKey: @(kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange) }];
+                                                       outputSettings:weakSelf.videoReaderSettings];
         assetReaderOutput.supportsRandomAccess = YES;
         [assetReader addOutput:assetReaderOutput];
         
@@ -695,6 +702,10 @@ typedef void(^ILABGenerateAssetBlock)(BOOL isSuccess, AVAsset *asset, NSError *e
             
             [assetReaderOutput resetForReadingTimeRanges:@[[NSValue valueWithCMTimeRange:CMTimeRangeMake(passStartTime, passDuration)]]];
             
+            if (weakSelf.showDebug) {
+                NSLog(@"passStartTime: %f, passDuration: %f", CMTimeGetSeconds(passStartTime), CMTimeGetSeconds(passDuration));
+            }
+
             NSMutableArray *samples = [NSMutableArray new];
             while((sample = [assetReaderOutput copyNextSampleBuffer])) {
                 [samples addObject:(__bridge id)sample];
