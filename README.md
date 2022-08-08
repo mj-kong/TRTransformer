@@ -1,11 +1,10 @@
 # TRTransformer
+A set of utility classes for reversing or transcoding AVAsset video and audio partially.
 
-A description of this package.
+These classes will reverse or transcode video, audio and videos with audio. 
 
-support `Reverse` and `Transcode`
-output file format
-- video: H264
-- audio: M4A
+Video reversal is based heavily on Chris Sung's [CSVideoReverse](https://github.com/chrissung/CSVideoReverse) class, This is forked from [Interfacelab/ILABReverseVideoExporter](https://github.com/Interfacelab/ILABReverseVideoExporter)
+
 
 ## Reverse
 /// Example
