@@ -8,66 +8,24 @@
 #import "ILABAudioTrackExporter.h"
 @import Accelerate;
 
-@interface ILABAudioTrackExporter ()
-@property (nonatomic, strong) AVAsset *sourceAsset;
-@property (nonatomic, strong) AVAsset *exportingAudioAsset;
-@property (nonatomic, strong) NSError * lastError;
-
-@property (nonatomic, strong) AVAssetReader *assetReader;
-@property (nonatomic, strong) AVAssetReaderOutput *assetReaderOutput;
-@property (nonatomic, strong) AVAssetWriter *assetWriter;
-@property (nonatomic, strong) AVAssetWriterInput *assetWriterInput;
-
-@property (nonatomic) NSInteger trackIndex;
-
-@property (nonatomic) Float64 sourceSampleRate;
-@property (nonatomic) UInt32 sourceEstimatedDataRate;
-@property (nonatomic) UInt32 sourceChannel;
+#pragma mark - AVAssetTrack (Settings)
+@interface AVAssetTrack (Settings)
+-(NSDictionary *)decompressionAudioSettingForPCMType;
+-(NSDictionary *)compressionAudioSettingForPCMType;
 @end
 
-@implementation ILABAudioTrackExporter
-
-#pragma mark - Init/Dealloc
-
--(instancetype)initWithAsset:(AVAsset *)sourceAsset trackIndex:(NSInteger)trackIndex {
-    return [self initWithAsset:sourceAsset
-                    trackIndex:0
-                     timeRange:CMTimeRangeMake(kCMTimeZero, sourceAsset.duration)];
-}
-
--(instancetype)initWithAsset:(AVAsset *)sourceAsset trackIndex:(NSInteger)trackIndex timeRange:(CMTimeRange)timeRange {
-    if (self = [super init]) {
-        self.sourceAsset = sourceAsset;
-        self.trackIndex = trackIndex;
-        
-        AVAssetTrack *audioTrack = [sourceAsset tracksWithMediaType:AVMediaTypeAudio].firstObject;
-        CMAudioFormatDescriptionRef descriptionRef = (__bridge CMAudioFormatDescriptionRef)(audioTrack.formatDescriptions[0]);
-        const AudioStreamBasicDescription *description = CMAudioFormatDescriptionGetStreamBasicDescription(descriptionRef);
-        
-        self.sourceSampleRate = description->mSampleRate;
-        self.sourceChannel = description->mChannelsPerFrame;
-        self.sourceEstimatedDataRate = audioTrack.estimatedDataRate;
-
-        AVMutableComposition *audioComp = [AVMutableComposition composition];
-        for(AVAssetTrack *track in [sourceAsset tracksWithMediaType:AVMediaTypeAudio]) {
-            AVMutableCompositionTrack *atrack = [audioComp
-                                                 addMutableTrackWithMediaType:AVMediaTypeAudio
-                                                 preferredTrackID:kCMPersistentTrackID_Invalid];
-            [atrack insertTimeRange:timeRange ofTrack:track atTime:kCMTimeZero error:nil];
-        }
-        self.exportingAudioAsset = audioComp;
-    }
-    return self;
-}
-
+@implementation AVAssetTrack (Settings)
 -(NSDictionary *)decompressionAudioSettingForPCMType {
+    CMAudioFormatDescriptionRef descriptionRef = (__bridge CMAudioFormatDescriptionRef)(self.formatDescriptions[0]);
+    const AudioStreamBasicDescription *description = CMAudioFormatDescriptionGetStreamBasicDescription(descriptionRef);
+
     AudioChannelLayout stereoChannelLayout = {
-        .mChannelLayoutTag = self.sourceChannel == 2 ? kAudioChannelLayoutTag_Stereo : kAudioChannelLayoutTag_Mono,
+        .mChannelLayoutTag = description->mChannelsPerFrame == 2 ? kAudioChannelLayoutTag_Stereo : kAudioChannelLayoutTag_Mono,
     };
     NSMutableDictionary *settings = [@{
         AVFormatIDKey:@(kAudioFormatLinearPCM),
-        AVNumberOfChannelsKey:@(self.sourceChannel),
-        AVSampleRateKey:@(self.sourceSampleRate),
+        AVNumberOfChannelsKey:@(description->mChannelsPerFrame),
+        AVSampleRateKey:@(description->mSampleRate),
         AVLinearPCMBitDepthKey:@32,
         AVLinearPCMIsFloatKey:@YES,
         AVLinearPCMIsNonInterleaved:@YES,
@@ -80,13 +38,16 @@
 }
 
 -(NSDictionary *)compressionAudioSettingForPCMType {
+    CMAudioFormatDescriptionRef descriptionRef = (__bridge CMAudioFormatDescriptionRef)(self.formatDescriptions[0]);
+    const AudioStreamBasicDescription *description = CMAudioFormatDescriptionGetStreamBasicDescription(descriptionRef);
+
     AudioChannelLayout stereoChannelLayout = {
-        .mChannelLayoutTag = self.sourceChannel == 2 ? kAudioChannelLayoutTag_Stereo : kAudioChannelLayoutTag_Mono,
+        .mChannelLayoutTag = description->mChannelsPerFrame == 2 ? kAudioChannelLayoutTag_Stereo : kAudioChannelLayoutTag_Mono,
     };
     NSMutableDictionary *settings = [@{
         AVFormatIDKey:@(kAudioFormatLinearPCM),
-        AVNumberOfChannelsKey:@(self.sourceChannel),
-        AVSampleRateKey:@(self.sourceSampleRate),
+        AVSampleRateKey:@(description->mSampleRate),
+        AVNumberOfChannelsKey:@(description->mChannelsPerFrame),
         AVLinearPCMBitDepthKey:@32,
         AVLinearPCMIsFloatKey:@NO,
         AVLinearPCMIsNonInterleaved:@NO,
@@ -97,33 +58,48 @@
     
     return settings;
 }
+@end
 
--(NSDictionary *)decompressionAudioSettingForM4AType {
-    NSMutableDictionary *settings = [@{
-        AVFormatIDKey:@(kAudioFormatLinearPCM),
-    } mutableCopy];
-    
-    return settings;
+#pragma mark - ILABAudioTrackExporter
+@interface ILABAudioTrackExporter ()
+@property (nonatomic, strong) AVAsset *exportingAudioAsset;
+@property (nonatomic, strong) NSError * lastError;
+
+@property (nonatomic, strong) AVAssetReader *assetReader;
+@property (nonatomic, strong) AVAssetReaderOutput *assetReaderOutput;
+@property (nonatomic, strong) AVAssetWriter *assetWriter;
+@property (nonatomic, strong) AVAssetWriterInput *assetWriterInput;
+@property (nonatomic, strong) AVAssetExportSession *exportSession;
+
+@property (nonatomic) NSInteger trackIndex;
+@end
+
+@implementation ILABAudioTrackExporter
+#pragma mark - Init/Dealloc
+-(instancetype)initWithAsset:(AVAsset *)sourceAsset trackIndex:(NSInteger)trackIndex {
+    return [self initWithAsset:sourceAsset
+                    trackIndex:0
+                     timeRange:CMTimeRangeMake(kCMTimeZero, sourceAsset.duration)];
 }
 
--(NSDictionary *)compressionAudioSettingsForM4AType {
-    AudioChannelLayout stereoChannelLayout = {
-        .mChannelLayoutTag = self.sourceChannel == 2 ? kAudioChannelLayoutTag_Stereo : kAudioChannelLayoutTag_Mono,
-    };
-    NSMutableDictionary *settings = [@{
-        AVFormatIDKey:@(kAudioFormatMPEG4AAC),
-        AVNumberOfChannelsKey:@(self.sourceChannel),
-        AVSampleRateKey:@(self.sourceSampleRate),
-        AVEncoderBitRateKey:@(self.sourceEstimatedDataRate),
-        AVChannelLayoutKey:[NSData dataWithBytes:&stereoChannelLayout
-                                          length:offsetof(AudioChannelLayout, mChannelDescriptions)]
-    } mutableCopy];
-    
-    return settings;
+-(instancetype)initWithAsset:(AVAsset *)sourceAsset trackIndex:(NSInteger)trackIndex timeRange:(CMTimeRange)timeRange {
+    if (self = [super init]) {
+        self.trackIndex = trackIndex;
+
+        AVMutableComposition *audioComp = [AVMutableComposition composition];
+        for(AVAssetTrack *track in [sourceAsset tracksWithMediaType:AVMediaTypeAudio]) {
+            AVMutableCompositionTrack *atrack = [audioComp addMutableTrackWithMediaType:AVMediaTypeAudio
+                                                                       preferredTrackID:kCMPersistentTrackID_Invalid];
+            [atrack insertTimeRange:timeRange
+                            ofTrack:track
+                             atTime:kCMTimeZero error:nil];
+        }
+        self.exportingAudioAsset = audioComp;
+    }
+    return self;
 }
 
 #pragma mark - Queue
-
 +(dispatch_queue_t)audioExportQueue {
     static dispatch_queue_t audioExportQueue = NULL;
     static dispatch_once_t onceToken;
@@ -146,9 +122,15 @@
 
 
 #pragma mark - Audio Export Methods
-
--(void)exportToURL:(NSURL *)outputURL complete:(ILABCompleteBlock)completeBlock {
-    [self exportingToURL:outputURL isPCMType:NO complete:completeBlock];
+- (void)exportInM4ATo:(NSURL *)outputURL completion:(ILABCompleteBlock)completion {
+    self.exportSession = [[AVAssetExportSession alloc] initWithAsset:self.exportingAudioAsset
+                                                          presetName:AVAssetExportPresetPassthrough];
+    self.exportSession.outputURL = outputURL;
+    self.exportSession.outputFileType = AVFileTypeAppleM4A;
+    self.exportSession.timeRange = CMTimeRangeMake(kCMTimeZero, [self.exportingAudioAsset duration]);
+    [self.exportSession exportAsynchronouslyWithCompletionHandler:^{
+        completion(YES, nil);
+    }];
 }
 
 -(void)exportReverseToURL:(NSURL *)outputURL complete:(ILABCompleteBlock)completeBlock {
@@ -157,7 +139,7 @@
     __weak typeof(self) weakSelf = self;
     
     dispatch_semaphore_t audioSema = dispatch_semaphore_create(0);
-    [self exportingToURL:tmpAudioFileURL isPCMType:YES complete:^(BOOL complete, NSError *error) {
+    [self exportingToURL:tmpAudioFileURL complete:^(BOOL complete, NSError *error) {
         if (error) {
             weakSelf.lastError = error;
         }
@@ -175,11 +157,7 @@
     [self exportingReverseToURL:outputURL tmpAudioFileURL:tmpAudioFileURL complete:completeBlock];
 }
 
--(BOOL)processSampleBuffer:(CMSampleBufferRef)sampleBuffer {
-    return YES;
-}
-
--(void)exportingToURL:(NSURL *)destinationURL isPCMType:(BOOL)isPCMType complete:(ILABCompleteBlock)completeBlock {
+-(void)exportingToURL:(NSURL *)destinationURL complete:(ILABCompleteBlock)completeBlock {
     __weak typeof(self) weakSelf = self;
     
     [[NSFileManager defaultManager] removeItemAtURL:destinationURL error:nil];
@@ -196,9 +174,9 @@
         return;
     }
     AVAssetTrack *track = [weakSelf.exportingAudioAsset tracksWithMediaType:AVMediaTypeAudio][weakSelf.trackIndex];
-    weakSelf.assetReaderOutput = [AVAssetReaderTrackOutput
-                                  assetReaderTrackOutputWithTrack:track
-                                  outputSettings:isPCMType ? [weakSelf decompressionAudioSettingForPCMType] : [weakSelf decompressionAudioSettingForM4AType]];
+
+    weakSelf.assetReaderOutput = [AVAssetReaderTrackOutput assetReaderTrackOutputWithTrack:track
+                                                                            outputSettings:[track decompressionAudioSettingForPCMType]];
     [weakSelf.assetReader addOutput:weakSelf.assetReaderOutput];
     
     if (![weakSelf.assetReader startReading]) {
@@ -208,18 +186,16 @@
     }
 
     // AVAssetWriter
-    weakSelf.assetWriter = [AVAssetWriter
-                            assetWriterWithURL:destinationURL
-                            fileType:isPCMType ? AVFileTypeWAVE : AVFileTypeAppleM4A
-                            error:&error];
+    weakSelf.assetWriter = [AVAssetWriter assetWriterWithURL:destinationURL
+                                                    fileType:AVFileTypeWAVE
+                                                       error:&error];
     if (error) {
         weakSelf.lastError = error;
         completeBlock(NO, weakSelf.lastError);
         return;
     }
-    weakSelf.assetWriterInput = [AVAssetWriterInput
-                                 assetWriterInputWithMediaType:AVMediaTypeAudio
-                                 outputSettings:isPCMType ? [weakSelf compressionAudioSettingForPCMType] : [weakSelf compressionAudioSettingsForM4AType]];
+    weakSelf.assetWriterInput = [AVAssetWriterInput assetWriterInputWithMediaType:AVMediaTypeAudio
+                                                                   outputSettings:[track compressionAudioSettingForPCMType]];
     [weakSelf.assetWriter addInput:weakSelf.assetWriterInput];
     
     if (![weakSelf.assetWriter startWriting]) {
@@ -247,8 +223,9 @@
     }];
 }
 
--(void)exportingReverseToURL:(NSURL *)outputURL tmpAudioFileURL:(NSURL *)tmpAudioFileURL complete:(ILABCompleteBlock)completeBlock {
-    
+-(void)exportingReverseToURL:(NSURL *)outputURL
+             tmpAudioFileURL:(NSURL *)tmpAudioFileURL
+                    complete:(ILABCompleteBlock)completeBlock {
     __weak typeof(self) weakSelf = self;
     
     // set up input file
@@ -370,3 +347,4 @@
 }
 
 @end
+

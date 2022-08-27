@@ -38,12 +38,12 @@
 -(instancetype)initWithAsset:(AVAsset *)sourceAsset trackIndex:(NSInteger)trackIndex timeRange:(CMTimeRange)timeRange;
 
 /**
- Exports the audio track to a .wav audio file
+ Exports the audio track to a .m4a audio file
 
  @param outputURL The URL to export to
- @param completeBlock The block that is called when the operation is complete
+ @param completion The block that is called when the operation is complete
  */
--(void)exportToURL:(NSURL *)outputURL complete:(ILABCompleteBlock)completeBlock;
+- (void)exportInM4ATo:(NSURL *)outputURL completion:(ILABCompleteBlock)completion;
 
 /**
  Exports the reversed version of the audio track to a .wav file
@@ -52,13 +52,5 @@
  @param completeBlock The block that is called when the operation is complete
  */
 -(void)exportReverseToURL:(NSURL *)outputURL complete:(ILABCompleteBlock)completeBlock;
-
-/**
- For subclasses, you can override this method to insert your own processing of the audio
-
- @param sampleBuffer The `CMSampleBufferRef` to process
- @return YES if processed, NO if error
- */
--(BOOL)processSampleBuffer:(CMSampleBufferRef)sampleBuffer;
 
 @end
