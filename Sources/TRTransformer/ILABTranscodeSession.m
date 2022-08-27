@@ -28,6 +28,7 @@
 @property (nonatomic, strong) AVAssetExportSession * exportSession;
 
 @property (nonatomic) BOOL availableHDR;
+@property (nonatomic) CMVideoCodecType sourceCodecType;
 @end
 
 typedef void(^ILABGenerateAssetBlock)(BOOL isSuccess, AVAsset *asset, NSError *error);
@@ -76,16 +77,14 @@ typedef void(^ILABGenerateAssetBlock)(BOOL isSuccess, AVAsset *asset, NSError *e
         
         [self configureSourceMeta];
 
-        if (@available(iOS 14.0, *)) {
-            if (AVPlayer.eligibleForHDRPlayback &&
-                [track hasMediaCharacteristic:AVMediaCharacteristicContainsHDRVideo]) {
-                self.availableHDR = YES;
-            }
-        } else {
-            self.availableHDR = NO;
+        if (AVPlayer.eligibleForHDRPlayback &&
+            [track hasMediaCharacteristic:AVMediaCharacteristicContainsHDRVideo]) {
+            self.availableHDR = YES;
         }
         self.size = self.sourceSize;
         self.frameRate = self.sourceFPS;
+        CMFormatDescriptionRef ref = (__bridge CMFormatDescriptionRef)([track.formatDescriptions firstObject]);
+        self.sourceCodecType = CMFormatDescriptionGetMediaSubType(ref);
     }
     return self;
 }
@@ -112,11 +111,14 @@ typedef void(^ILABGenerateAssetBlock)(BOOL isSuccess, AVAsset *asset, NSError *e
                  forKey:AVVideoAverageBitRateKey];
     [settings setObject:self.sourceSize.width * self.sourceSize.height > fullHDProportion ? @(YES) : @(NO)
                  forKey:AVVideoAllowFrameReorderingKey];
-    if (@available(iOS 14.0, *)) {
-        if (self.availableHDR) {
-            [settings setObject:(__bridge NSString*)kVTHDRMetadataInsertionMode_Auto
-                         forKey:(__bridge NSString*)kVTCompressionPropertyKey_HDRMetadataInsertionMode];
-            [settings setObject:(__bridge NSString*)kVTProfileLevel_HEVC_Main10_AutoLevel
+    if (self.availableHDR) {
+        [settings setObject:(__bridge NSString*)kVTHDRMetadataInsertionMode_Auto
+                     forKey:(__bridge NSString*)kVTCompressionPropertyKey_HDRMetadataInsertionMode];
+        [settings setObject:(__bridge NSString*)kVTProfileLevel_HEVC_Main10_AutoLevel
+                     forKey:AVVideoProfileLevelKey];
+    } else {
+        if (self.sourceCodecType == kCMVideoCodecType_HEVC) {
+            [settings setObject:(__bridge NSString*)kVTProfileLevel_HEVC_Main_AutoLevel
                          forKey:AVVideoProfileLevelKey];
         } else {
             if (self.sourceSize.width * self.sourceSize.height > fullHDProportion) {
@@ -129,30 +131,15 @@ typedef void(^ILABGenerateAssetBlock)(BOOL isSuccess, AVAsset *asset, NSError *e
                              forKey:AVVideoProfileLevelKey];
             }
         }
-    } else {
-        if (self.sourceSize.width * self.sourceSize.height > fullHDProportion) {
-            [settings setObject:AVVideoProfileLevelH264HighAutoLevel
-                         forKey:AVVideoProfileLevelKey];
-            [settings setObject:AVVideoH264EntropyModeCABAC
-                         forKey:AVVideoH264EntropyModeKey];
-        } else {
-            [settings setObject:AVVideoProfileLevelH264MainAutoLevel
-                         forKey:AVVideoProfileLevelKey];
-        }
     }
     return settings;
 }
 
 -(NSDictionary *)videoReaderSettings {
     NSMutableDictionary *settings = [NSMutableDictionary dictionary];
-    if (@available(iOS 14.0, *)) {
-        if (self.availableHDR) {
-            [settings setObject:@(kCVPixelFormatType_420YpCbCr10BiPlanarVideoRange)
-                         forKey:(NSString *)kCVPixelBufferPixelFormatTypeKey];
-        } else {
-            [settings setObject:@(kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange)
-                         forKey:(NSString *)kCVPixelBufferPixelFormatTypeKey];
-        }
+    if (self.availableHDR) {
+        [settings setObject:@(kCVPixelFormatType_420YpCbCr10BiPlanarVideoRange)
+                     forKey:(NSString *)kCVPixelBufferPixelFormatTypeKey];
     } else {
         [settings setObject:@(kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange)
                      forKey:(NSString *)kCVPixelBufferPixelFormatTypeKey];
@@ -167,24 +154,24 @@ typedef void(^ILABGenerateAssetBlock)(BOOL isSuccess, AVAsset *asset, NSError *e
                  forKey:AVVideoWidthKey];
     [settings setObject:@(self.size.height)
                  forKey:AVVideoHeightKey];
-    if (@available(iOS 14.0, *)) {
-        if (self.availableHDR) {
-            NSDictionary *colorProperties = @{
-                AVVideoColorPrimariesKey: AVVideoColorPrimaries_ITU_R_2020,
-                AVVideoTransferFunctionKey: AVVideoTransferFunction_ITU_R_2100_HLG,
-                AVVideoYCbCrMatrixKey: AVVideoYCbCrMatrix_ITU_R_2020
-            };
+    if (self.availableHDR) {
+        NSDictionary *colorProperties = @{
+            AVVideoColorPrimariesKey: AVVideoColorPrimaries_ITU_R_2020,
+            AVVideoTransferFunctionKey: AVVideoTransferFunction_ITU_R_2100_HLG,
+            AVVideoYCbCrMatrixKey: AVVideoYCbCrMatrix_ITU_R_2020
+        };
+        [settings setObject:AVVideoCodecTypeHEVC
+                     forKey:AVVideoCodecKey];
+        [settings setObject:colorProperties
+                     forKey:AVVideoColorPropertiesKey];
+    } else {
+        if (self.sourceCodecType == kCMVideoCodecType_HEVC) {
             [settings setObject:AVVideoCodecTypeHEVC
                          forKey:AVVideoCodecKey];
-            [settings setObject:colorProperties
-                         forKey:AVVideoColorPropertiesKey];
         } else {
-            [settings setObject:AVVideoCodecH264
+            [settings setObject:AVVideoCodecTypeH264
                          forKey:AVVideoCodecKey];
         }
-    } else {
-        [settings setObject:AVVideoCodecH264
-                     forKey:AVVideoCodecKey];
     }
     [settings setObject:self.videoCompressionProperties
                  forKey:AVVideoCompressionPropertiesKey];
@@ -228,14 +215,6 @@ typedef void(^ILABGenerateAssetBlock)(BOOL isSuccess, AVAsset *asset, NSError *e
     while(dispatch_semaphore_wait(loadSemi, DISPATCH_TIME_NOW)) {
         [[NSRunLoop mainRunLoop] runUntilDate:[NSDate date]];
     }
-}
-
--(void)setSize:(CGSize)size {
-    _size = size;
-}
-
--(void)setEstimatedDataRate:(CGFloat)estimatedDataRate {
-    _estimatedDataRate = estimatedDataRate;
 }
 
 -(void)setFrameRate:(CGFloat)frameRate {
@@ -461,11 +440,12 @@ typedef void(^ILABGenerateAssetBlock)(BOOL isSuccess, AVAsset *asset, NSError *e
         ILABAudioTrackExporter *audioExporter = [[ILABAudioTrackExporter alloc] initWithAsset:weakSelf.sourceAsset trackIndex:0 timeRange:weakSelf.timeRange];
         
         dispatch_semaphore_t audioExportSemi = dispatch_semaphore_create(0);
-        [audioExporter exportToURL:destinationURL complete:^(BOOL isSuccess, NSError *error) {
+        [audioExporter exportInM4ATo:destinationURL
+                          completion:^(BOOL complete, NSError *error) {
             if (error) {
                 weakSelf.lastError = error;
             }
-            result = isSuccess;
+            result = complete;
             dispatch_semaphore_signal(audioExportSemi);
         }];
         dispatch_semaphore_wait(audioExportSemi, DISPATCH_TIME_FOREVER);
@@ -616,7 +596,6 @@ typedef void(^ILABGenerateAssetBlock)(BOOL isSuccess, AVAsset *asset, NSError *e
             if (weakSelf.showDebug) {
                 NSLog(@"transcode append presentationTime: %.3f", CMTimeGetSeconds(presentationTime));
             }
-
             if (progressBlock) {
                 [weakSelf updateProgressBlock:progressBlock
                                     operation:@"Transcoding Video"
