@@ -101,6 +101,28 @@ typedef void(^ILABGenerateAssetBlock)(BOOL isSuccess, AVAsset *asset, NSError *e
     return session;
 }
 
+-(NSDictionary *)videoDefaultCompressionProperties {
+    static const NSInteger fullHDProportion = 1920 * 1080;
+    
+    Float64 bitrate = ((self.size.width * self.size.height * self.frameRate * 0.17) / 1024) * 1000;
+    NSMutableDictionary *settings = [NSMutableDictionary dictionary];
+    
+    [settings setObject:@(self.estimatedDataRate == 0 ? bitrate : self.estimatedDataRate)
+                 forKey:AVVideoAverageBitRateKey];
+    [settings setObject:self.sourceSize.width * self.sourceSize.height > fullHDProportion ? @(YES) : @(NO)
+                 forKey:AVVideoAllowFrameReorderingKey];
+    if (self.sourceSize.width * self.sourceSize.height > fullHDProportion) {
+        [settings setObject:AVVideoProfileLevelH264HighAutoLevel
+                     forKey:AVVideoProfileLevelKey];
+        [settings setObject:AVVideoH264EntropyModeCABAC
+                     forKey:AVVideoH264EntropyModeKey];
+    } else {
+        [settings setObject:AVVideoProfileLevelH264MainAutoLevel
+                     forKey:AVVideoProfileLevelKey];
+    }
+    return settings;
+}
+
 -(NSDictionary *)videoCompressionProperties {
     static const NSInteger fullHDProportion = 1920 * 1080;
     
@@ -144,6 +166,21 @@ typedef void(^ILABGenerateAssetBlock)(BOOL isSuccess, AVAsset *asset, NSError *e
         [settings setObject:@(kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange)
                      forKey:(NSString *)kCVPixelBufferPixelFormatTypeKey];
     }
+    return settings;
+}
+
+-(NSDictionary *)videoDefaultSettings {
+    NSMutableDictionary *settings = [NSMutableDictionary dictionary];
+
+    [settings setObject:@(self.size.width)
+                 forKey:AVVideoWidthKey];
+    [settings setObject:@(self.size.height)
+                 forKey:AVVideoHeightKey];
+    [settings setObject:AVVideoCodecTypeH264
+                 forKey:AVVideoCodecKey];
+    [settings setObject:self.videoDefaultCompressionProperties
+                 forKey:AVVideoCompressionPropertiesKey];
+
     return settings;
 }
 
@@ -513,31 +550,30 @@ typedef void(^ILABGenerateAssetBlock)(BOOL isSuccess, AVAsset *asset, NSError *e
             return;
         }
         
-        // AVAssetWriter
-        AVAssetWriter *assetWriter = [AVAssetWriter
-                                      assetWriterWithURL:destinationURL
-                                      fileType:AVFileTypeQuickTimeMovie
-                                      error:&error];
-        if (error) {
-            weakSelf.lastError = error;
-            completeBlock(NO, nil, weakSelf.lastError);
-            return;
-        }
-        
-        AVAssetWriterInput *assetWriterInput = [AVAssetWriterInput
-                                                assetWriterInputWithMediaType:AVMediaTypeVideo
-                                                outputSettings:weakSelf.videoOutputSettings];
-        assetWriterInput.expectsMediaDataInRealTime = NO;
-        assetWriterInput.transform = weakSelf.sourceTransform;
-        
-        [assetWriter addInput:assetWriterInput];
-        
-        if (![assetWriter startWriting]) {
-            weakSelf.lastError = [NSError ILABSessionError:ILABSessionErrorAVAssetWriterStartWriting];
-            completeBlock(NO, nil, weakSelf.lastError);
-            return;
-        }
-        
+        AVAssetWriter *assetWriter;
+        AVAssetWriterInput *assetWriterInput;
+
+        BOOL writerEnable = NO;
+        BOOL firstTry = YES;
+
+        do {
+            assetWriter = [AVAssetWriter assetWriterWithURL:destinationURL
+                                                   fileType:AVFileTypeQuickTimeMovie
+                                                      error:&error];
+            assetWriterInput = [AVAssetWriterInput assetWriterInputWithMediaType:AVMediaTypeVideo
+                                                                  outputSettings:firstTry ? weakSelf.videoOutputSettings : weakSelf.videoDefaultSettings];
+            assetWriterInput.expectsMediaDataInRealTime = NO;
+            assetWriterInput.transform = weakSelf.sourceTransform;
+            
+            [assetWriter addInput:assetWriterInput];
+           
+            writerEnable = [assetWriter startWriting];
+            if (writerEnable == NO) {
+                firstTry = NO;
+                [NSFileManager.defaultManager removeItemAtURL:destinationURL error:nil];
+            }
+        } while (writerEnable == NO);
+
         [assetWriter startSessionAtSourceTime:kCMTimeZero];
         
         NSInteger readFrameCount = 0;
