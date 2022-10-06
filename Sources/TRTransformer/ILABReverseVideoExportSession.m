@@ -489,22 +489,22 @@ typedef void(^ILABGenerateAssetBlock)(BOOL isSuccess, AVAsset *asset, NSError *e
     });
 }
 
--(AVAsset *)convertToMA4TypeAtDestinationURL:(NSURL *)destinationURL asset:(AVAsset *)asset {
+-(BOOL)convertToMA4TypeAtDestinationURL:(NSURL *)destinationURL asset:(AVAsset *)asset {
     ILABAudioTrackExporter *audioExporter = [[ILABAudioTrackExporter alloc] initWithAsset:asset trackIndex:0];
-    
-    __block AVAsset *convertedAsset = nil;
-    
+
+    __block BOOL result = NO;
+
     dispatch_semaphore_t audioSema = dispatch_semaphore_create(0);
     dispatch_async([[self class] conversionGenerationQueue], ^{
-        [audioExporter exportInM4ATo:destinationURL completion:^(BOOL complete, NSError *error) {
-            if (complete) {
-                convertedAsset = [AVURLAsset assetWithURL:destinationURL];
-                dispatch_semaphore_signal(audioSema);
-            }
+        [audioExporter exportInM4ATo:destinationURL
+                          completion:^(BOOL complete, NSError *error) {
+            result = complete;
+            dispatch_semaphore_signal(audioSema);
         }];
     });
     dispatch_semaphore_wait(audioSema, DISPATCH_TIME_FOREVER);
-    return convertedAsset;
+
+    return result;
 }
 
 -(void)reverseAudioDestinationURL:(NSURL *)destinationURL completeBlcok:(ILABCompleteBlock)completeBlock {
@@ -520,8 +520,12 @@ typedef void(^ILABGenerateAssetBlock)(BOOL isSuccess, AVAsset *asset, NSError *e
     [self reversingAudioAtDestinationURL:tempAudioFileURL
                             completBlock:^(BOOL isSuccess, AVAsset *reversedAudioAsset, NSError *error) {
         if (isSuccess) {
-            asset = [weakSelf convertToMA4TypeAtDestinationURL:destinationURL
-                                                         asset:reversedAudioAsset];
+            BOOL success = [weakSelf convertToMA4TypeAtDestinationURL:destinationURL asset:reversedAudioAsset];
+
+            asset = reversedAudioAsset;
+            if (success) {
+                asset = [AVURLAsset assetWithURL:destinationURL];
+            }
         } else if (error) {
             weakSelf.lastError = error;
         }

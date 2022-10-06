@@ -15,12 +15,23 @@
 @end
 
 @implementation AVAssetTrack (Settings)
+-(AudioChannelLayoutTag)getLayerTagWithChannelPerFrame:(UInt32)channelPerFrame {
+    if (channelPerFrame == 1) { return kAudioChannelLayoutTag_MPEG_1_0; }
+    else if (channelPerFrame == 2) { return kAudioChannelLayoutTag_MPEG_2_0; }
+    else if (channelPerFrame == 3) { return kAudioChannelLayoutTag_MPEG_3_0_A; }
+    else if (channelPerFrame == 4) { return kAudioChannelLayoutTag_MPEG_4_0_A; }
+    else if (channelPerFrame == 5) { return kAudioChannelLayoutTag_MPEG_5_0_A; }
+    else if (channelPerFrame == 6) { return kAudioChannelLayoutTag_MPEG_5_1_A; }
+    else if (channelPerFrame == 7) { return kAudioChannelLayoutTag_MPEG_6_1_A; }
+    else if (channelPerFrame == 8) { return kAudioChannelLayoutTag_MPEG_7_1_A; }
+}
+                                    
 -(NSDictionary *)decompressionAudioSettingForPCMType {
     CMAudioFormatDescriptionRef descriptionRef = (__bridge CMAudioFormatDescriptionRef)(self.formatDescriptions[0]);
     const AudioStreamBasicDescription *description = CMAudioFormatDescriptionGetStreamBasicDescription(descriptionRef);
 
     AudioChannelLayout stereoChannelLayout = {
-        .mChannelLayoutTag = description->mChannelsPerFrame == 2 ? kAudioChannelLayoutTag_Stereo : kAudioChannelLayoutTag_Mono,
+        .mChannelLayoutTag = [self getLayerTagWithChannelPerFrame:description->mChannelsPerFrame],
     };
     NSMutableDictionary *settings = [@{
         AVFormatIDKey:@(kAudioFormatLinearPCM),
@@ -42,7 +53,7 @@
     const AudioStreamBasicDescription *description = CMAudioFormatDescriptionGetStreamBasicDescription(descriptionRef);
 
     AudioChannelLayout stereoChannelLayout = {
-        .mChannelLayoutTag = description->mChannelsPerFrame == 2 ? kAudioChannelLayoutTag_Stereo : kAudioChannelLayoutTag_Mono,
+        .mChannelLayoutTag = [self getLayerTagWithChannelPerFrame:description->mChannelsPerFrame],
     };
     NSMutableDictionary *settings = [@{
         AVFormatIDKey:@(kAudioFormatLinearPCM),
@@ -128,8 +139,14 @@
     self.exportSession.outputURL = outputURL;
     self.exportSession.outputFileType = AVFileTypeAppleM4A;
     self.exportSession.timeRange = CMTimeRangeMake(kCMTimeZero, [self.exportingAudioAsset duration]);
+    
+    __weak typeof(self) weakSelf = self;
     [self.exportSession exportAsynchronouslyWithCompletionHandler:^{
-        completion(YES, nil);
+        if (weakSelf.exportSession.status == AVAssetExportSessionStatusCompleted) {
+            completion(YES, nil);
+        } else if (weakSelf.exportSession.status == AVAssetExportSessionStatusFailed) {
+            completion(NO, weakSelf.exportSession.error);
+        }
     }];
 }
 
