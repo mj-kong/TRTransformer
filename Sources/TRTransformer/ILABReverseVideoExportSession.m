@@ -334,9 +334,7 @@ typedef void(^ILABGenerateAssetBlock)(BOOL isSuccess, AVAsset *asset, NSError *e
     
     __weak typeof(self) weakSelf = self;
     
-    [self reverseAudioDestinationURL:audioDestionationURL
-                       completeBlcok:completeBlock];
-    
+    [self reverseAudioDestinationURL:audioDestionationURL completeBlcok:nil];
     [self reverseVideoAtDestinationURL:videoDestinationURL
                               progress:progressBlock
                          completeBlock:^(BOOL isSuccess, AVAsset *reversedVideoAsset, NSError *error) {
@@ -489,7 +487,7 @@ typedef void(^ILABGenerateAssetBlock)(BOOL isSuccess, AVAsset *asset, NSError *e
     });
 }
 
--(BOOL)convertToMA4TypeAtDestinationURL:(NSURL *)destinationURL asset:(AVAsset *)asset {
+-(BOOL)convertToM4ATypeAtDestinationURL:(NSURL *)destinationURL asset:(AVAsset *)asset {
     ILABAudioTrackExporter *audioExporter = [[ILABAudioTrackExporter alloc] initWithAsset:asset trackIndex:0];
 
     __block BOOL result = NO;
@@ -514,20 +512,20 @@ typedef void(^ILABGenerateAssetBlock)(BOOL isSuccess, AVAsset *asset, NSError *e
     NSURL *tempAudioFileURL = [NSURL fileURLWithPath:[cachePath stringByAppendingFormat:@"/%@-tempAudio.wav",[[NSUUID UUID] UUIDString]]];
     
     __weak typeof(self) weakSelf = self;
-    __block AVAsset *asset = nil;
-    
+    __block NSError *_error = nil;
+
     dispatch_semaphore_t audioSema = dispatch_semaphore_create(0);
     [self reversingAudioAtDestinationURL:tempAudioFileURL
                             completBlock:^(BOOL isSuccess, AVAsset *reversedAudioAsset, NSError *error) {
         if (isSuccess) {
-            BOOL success = [weakSelf convertToMA4TypeAtDestinationURL:destinationURL asset:reversedAudioAsset];
-
-            asset = reversedAudioAsset;
-            if (success) {
+            AVAsset *asset = reversedAudioAsset;
+            BOOL convertToM4AType = [weakSelf convertToM4ATypeAtDestinationURL:destinationURL asset:reversedAudioAsset];
+            if (convertToM4AType) {
                 asset = [AVURLAsset assetWithURL:destinationURL];
             }
-        } else if (error) {
-            weakSelf.lastError = error;
+            weakSelf.reversedAudioAsset = asset;
+        } else {
+            _error = error;
         }
         dispatch_semaphore_signal(audioSema);
     }];
@@ -536,13 +534,11 @@ typedef void(^ILABGenerateAssetBlock)(BOOL isSuccess, AVAsset *asset, NSError *e
     
     [[NSFileManager defaultManager] removeItemAtURL:tempAudioFileURL error:nil];
     
-    if (self.lastError || asset == nil) {
+    if (_error != nil) {
         if (completeBlock) {
-            completeBlock(NO, self.lastError);
+            completeBlock(NO, _error);
         }
-        return;
     }
-    self.reversedAudioAsset = asset;
 }
 
 -(void)reverseVideoAtDestinationURL:(NSURL *)destinationURL progress:(ILABProgressBlock)progressBlock completeBlock:(ILABGenerateAssetBlock)resultsBlock {

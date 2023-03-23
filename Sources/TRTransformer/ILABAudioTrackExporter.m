@@ -135,7 +135,7 @@
 #pragma mark - Audio Export Methods
 - (void)exportInM4ATo:(NSURL *)outputURL completion:(ILABCompleteBlock)completion {
     self.exportSession = [[AVAssetExportSession alloc] initWithAsset:self.exportingAudioAsset
-                                                          presetName:AVAssetExportPresetPassthrough];
+                                                          presetName:AVAssetExportPresetAppleM4A];
     self.exportSession.outputURL = outputURL;
     self.exportSession.outputFileType = AVFileTypeAppleM4A;
     self.exportSession.timeRange = CMTimeRangeMake(kCMTimeZero, [self.exportingAudioAsset duration]);

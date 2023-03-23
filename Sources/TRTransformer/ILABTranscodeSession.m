@@ -333,9 +333,7 @@ typedef void(^ILABGenerateAssetBlock)(BOOL isSuccess, AVAsset *asset, NSError *e
     NSURL *audioDestionationURL = [NSURL fileURLWithPath:[cachePath stringByAppendingFormat:@"/%@-tempAudio.m4a",[[NSUUID UUID] UUIDString]]];
     NSURL *videoDestinationURL = [NSURL fileURLWithPath:[cachePath stringByAppendingFormat:@"/%@-tempVideo.mov",[[NSUUID UUID] UUIDString]]];
     
-    [self transcodeAudioAtDestinationURL:audioDestionationURL
-                           completeBlcok:completeBlock];
-    
+    [self transcodeAudioAtDestinationURL:audioDestionationURL completeBlcok:nil];
     [self transcodeVideoAtDestinationURL:videoDestinationURL
                                 progress:progressBlock
                            completeBlock:^(BOOL isSuccess, AVAsset *transcodedVideoAsset, NSError *error) {
@@ -472,6 +470,7 @@ typedef void(^ILABGenerateAssetBlock)(BOOL isSuccess, AVAsset *asset, NSError *e
 -(void)transcodingAudioAtDestinationURL:(NSURL *)destinationURL completBlock:(ILABGenerateAssetBlock)resultsBlock {
     __weak typeof(self) weakSelf = self;
     __block BOOL result = NO;
+    __block NSError *_error = nil;
     
     dispatch_async([[self class] transcodeGenerateQueue], ^{
         ILABAudioTrackExporter *audioExporter = [[ILABAudioTrackExporter alloc] initWithAsset:weakSelf.sourceAsset trackIndex:0 timeRange:weakSelf.timeRange];
@@ -479,9 +478,7 @@ typedef void(^ILABGenerateAssetBlock)(BOOL isSuccess, AVAsset *asset, NSError *e
         dispatch_semaphore_t audioExportSemi = dispatch_semaphore_create(0);
         [audioExporter exportInM4ATo:destinationURL
                           completion:^(BOOL complete, NSError *error) {
-            if (error) {
-                weakSelf.lastError = error;
-            }
+            _error = error;
             result = complete;
             dispatch_semaphore_signal(audioExportSemi);
         }];
@@ -490,7 +487,7 @@ typedef void(^ILABGenerateAssetBlock)(BOOL isSuccess, AVAsset *asset, NSError *e
         if (result) {
             resultsBlock(YES, [AVURLAsset assetWithURL:destinationURL], nil);
         } else {
-            resultsBlock(NO, nil, weakSelf.lastError);
+            resultsBlock(NO, nil, _error);
         }
     });
 }
@@ -499,28 +496,26 @@ typedef void(^ILABGenerateAssetBlock)(BOOL isSuccess, AVAsset *asset, NSError *e
     if (self.sourceAudioTracks== 0) return;
     
     __weak typeof(self) weakSelf = self;
-    __block AVAsset *asset = nil;
-    
+    __block NSError *_error = nil;
+
     dispatch_semaphore_t audioSema = dispatch_semaphore_create(0);
     [self transcodingAudioAtDestinationURL:destinationURL
                               completBlock:^(BOOL isSuccess, AVAsset *transcodedAudioAsset, NSError *error) {
         if (isSuccess) {
-            asset = transcodedAudioAsset;
-        } else if (error) {
-            weakSelf.lastError = error;
+            weakSelf.transcodedAudioAsset = transcodedAudioAsset;
+        } else {
+            _error = error;
         }
         dispatch_semaphore_signal(audioSema);
     }];
     
     dispatch_semaphore_wait(audioSema, DISPATCH_TIME_FOREVER);
     
-    if (self.lastError) {
+    if (_error != nil) {
         if (completeBlock) {
-            completeBlock(NO, self.lastError);
+            completeBlock(NO, _error);
         }
-        return;
     }
-    self.transcodedAudioAsset = asset;
 }
 
 - (void)transcodeVideoAtDestinationURL:(NSURL *)destinationURL progress:(ILABProgressBlock)progressBlock completeBlock:(ILABGenerateAssetBlock)completeBlock {
