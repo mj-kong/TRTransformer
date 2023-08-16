@@ -27,6 +27,7 @@
 @property (nonatomic, strong) AVAsset * reversingVideoAsset;
 @property (nonatomic, strong) AVAsset * reversedAudioAsset;
 @property (nonatomic, strong) AVAssetExportSession * exportSession;
+@property (nonatomic, strong) ILABAudioTrackExporter * audioExporter;
 
 @property (nonatomic) BOOL availableHDR;
 @property (nonatomic) CMVideoCodecType sourceCodecType;
@@ -65,6 +66,7 @@ typedef void(^ILABGenerateAssetBlock)(BOOL isSuccess, AVAsset *asset, NSError *e
         self.timeRange = timeRange;
         self.sourceAsset = sourceAsset;
         self.exportSession = nil;
+        self.audioExporter = nil;
         self.deleteCacheFile = YES;
         self.showDebug = NO;
         self.samplesPerPass = 40;
@@ -471,9 +473,11 @@ typedef void(^ILABGenerateAssetBlock)(BOOL isSuccess, AVAsset *asset, NSError *e
     __weak typeof(self) weakSelf = self;
     
     dispatch_async([[self class] reverseGenerateQueue], ^{
-        ILABAudioTrackExporter *audioExporter = [[ILABAudioTrackExporter alloc] initWithAsset:weakSelf.sourceAsset trackIndex:0 timeRange:weakSelf.timeRange];
+        self.audioExporter = [[ILABAudioTrackExporter alloc] initWithAsset:weakSelf.sourceAsset trackIndex:0 timeRange:weakSelf.timeRange];
         
-        [audioExporter exportReverseToURL:destinationURL complete:^(BOOL isSuccess, NSError *error) {
+        [self.audioExporter exportReverseToURL:destinationURL
+                                      complete:^(BOOL isSuccess, NSError *error) {
+            weakSelf.audioExporter = nil;
             if (error) {
                 weakSelf.lastError = error;
             }
@@ -488,15 +492,17 @@ typedef void(^ILABGenerateAssetBlock)(BOOL isSuccess, AVAsset *asset, NSError *e
 }
 
 -(BOOL)convertToM4ATypeAtDestinationURL:(NSURL *)destinationURL asset:(AVAsset *)asset {
-    ILABAudioTrackExporter *audioExporter = [[ILABAudioTrackExporter alloc] initWithAsset:asset trackIndex:0];
+    self.audioExporter = [[ILABAudioTrackExporter alloc] initWithAsset:asset trackIndex:0];
 
     __block BOOL result = NO;
+    __weak typeof(self) weakSelf = self;
 
     dispatch_semaphore_t audioSema = dispatch_semaphore_create(0);
     dispatch_async([[self class] conversionGenerationQueue], ^{
-        [audioExporter exportInM4ATo:destinationURL
-                          completion:^(BOOL complete, NSError *error) {
+        [self.audioExporter exportInM4ATo:destinationURL
+                               completion:^(BOOL complete, NSError *error) {
             result = complete;
+            weakSelf.audioExporter = nil;
             dispatch_semaphore_signal(audioSema);
         }];
     });
@@ -822,6 +828,9 @@ typedef void(^ILABGenerateAssetBlock)(BOOL isSuccess, AVAsset *asset, NSError *e
 
 -(void)cancelReverseExport {
     dispatch_barrier_sync([[self class] reverseCancelQueue], ^{
+        if (self.audioExporter) {
+            self.audioExporter.isCanceled = YES;
+        }
         self.isCanceled = YES;
         [self.exportSession cancelExport];
     });
@@ -832,6 +841,7 @@ typedef void(^ILABGenerateAssetBlock)(BOOL isSuccess, AVAsset *asset, NSError *e
     dispatch_sync([[self class] reverseCancelQueue], ^{
         _isCanceled = self.isCanceled;
     });
-    return _isCanceled;}
+    return _isCanceled;
+}
 
 @end

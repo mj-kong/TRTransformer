@@ -226,9 +226,15 @@
     [weakSelf.assetWriterInput requestMediaDataWhenReadyOnQueue:[[self class] audioExportGenerateQueue] usingBlock:^{
         while ([weakSelf.assetWriterInput isReadyForMoreMediaData]) {
             CMSampleBufferRef nextSampleBuffer = [weakSelf.assetReaderOutput copyNextSampleBuffer];
+            if (weakSelf.isCanceled) {
+                weakSelf.lastError = [NSError ILABSessionError:ILABSessionErrorUserCancel];
+                completeBlock(NO, weakSelf.lastError);
+                CFRelease(nextSampleBuffer); nextSampleBuffer = NULL;
+                return;
+            }
             if (nextSampleBuffer) {
                 [weakSelf.assetWriterInput appendSampleBuffer:nextSampleBuffer];
-                CFRelease(nextSampleBuffer);
+                CFRelease(nextSampleBuffer); nextSampleBuffer = NULL;
             } else {
                 [weakSelf.assetWriterInput markAsFinished];
                 [weakSelf.assetWriter finishWritingWithCompletionHandler:^{

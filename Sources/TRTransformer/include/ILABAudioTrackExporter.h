@@ -16,7 +16,7 @@
 @property (readonly) BOOL exporting;            /**< Determines if the exporter is currently exporting */
 @property (readonly) NSInteger trackIndex;      /**< The track index being exported */
 @property (readonly) AVAsset *sourceAsset;      /**< The source asset the track is being exported from */
-
+@property (nonatomic) BOOL isCanceled;
 
 /**
  Create a new instance for the track exporter
