@@ -142,10 +142,10 @@
     
     __weak typeof(self) weakSelf = self;
     [self.exportSession exportAsynchronouslyWithCompletionHandler:^{
-        if (weakSelf.exportSession.status == AVAssetExportSessionStatusCompleted) {
-            completion(YES, nil);
-        } else if (weakSelf.exportSession.status == AVAssetExportSessionStatusFailed) {
+        if (weakSelf.exportSession.status == AVAssetExportSessionStatusFailed) {
             completion(NO, weakSelf.exportSession.error);
+        } else {
+            completion(YES, nil);
         }
     }];
 }
@@ -155,89 +155,80 @@
 
     __weak typeof(self) weakSelf = self;
     
-    dispatch_semaphore_t audioSema = dispatch_semaphore_create(0);
     [self exportingToURL:tmpAudioFileURL complete:^(BOOL complete, NSError *error) {
         if (error) {
             weakSelf.lastError = error;
+            if (completeBlock) {
+                completeBlock(NO, error);
+            }
+            return;
+        } else {
+            [self exportingReverseToURL:outputURL tmpAudioFileURL:tmpAudioFileURL complete:completeBlock];
         }
-        dispatch_semaphore_signal(audioSema);
     }];
-    dispatch_semaphore_wait(audioSema, DISPATCH_TIME_FOREVER);
-    
-    if (self.lastError) {
-        if (completeBlock) {
-            completeBlock(NO, self.lastError);
-        }
-        return;
-    }
-    
-    [self exportingReverseToURL:outputURL tmpAudioFileURL:tmpAudioFileURL complete:completeBlock];
 }
 
 -(void)exportingToURL:(NSURL *)destinationURL complete:(ILABCompleteBlock)completeBlock {
-    __weak typeof(self) weakSelf = self;
-    
     [[NSFileManager defaultManager] removeItemAtURL:destinationURL error:nil];
     
     NSError *error = nil;
     
     // AVAssetReader
-    weakSelf.assetReader = [AVAssetReader
-                            assetReaderWithAsset:weakSelf.exportingAudioAsset
-                            error:&error];
+    self.assetReader = [AVAssetReader assetReaderWithAsset:self.exportingAudioAsset
+                                                     error:&error];
     if (error) {
-        weakSelf.lastError = error;
+        self.lastError = error;
         completeBlock(NO, error);
         return;
     }
-    AVAssetTrack *track = [weakSelf.exportingAudioAsset tracksWithMediaType:AVMediaTypeAudio][weakSelf.trackIndex];
+    AVAssetTrack *track = [self.exportingAudioAsset tracksWithMediaType:AVMediaTypeAudio][self.trackIndex];
 
-    weakSelf.assetReaderOutput = [AVAssetReaderTrackOutput assetReaderTrackOutputWithTrack:track
-                                                                            outputSettings:[track decompressionAudioSettingForPCMType]];
-    [weakSelf.assetReader addOutput:weakSelf.assetReaderOutput];
+    self.assetReaderOutput = [AVAssetReaderTrackOutput assetReaderTrackOutputWithTrack:track
+                                                                        outputSettings:[track decompressionAudioSettingForPCMType]];
+    [self.assetReader addOutput:self.assetReaderOutput];
     
-    if (![weakSelf.assetReader startReading]) {
-        weakSelf.lastError = [NSError ILABSessionError:ILABSessionErrorAVAssetReaderStartReading];
-        completeBlock(NO, weakSelf.lastError);
+    if (![self.assetReader startReading]) {
+        self.lastError = [NSError ILABSessionError:ILABSessionErrorAVAssetReaderStartReading];
+        completeBlock(NO, self.lastError);
         return;
     }
 
     // AVAssetWriter
-    weakSelf.assetWriter = [AVAssetWriter assetWriterWithURL:destinationURL
-                                                    fileType:AVFileTypeWAVE
-                                                       error:&error];
+    self.assetWriter = [AVAssetWriter assetWriterWithURL:destinationURL
+                                                fileType:AVFileTypeWAVE
+                                                   error:&error];
     if (error) {
-        weakSelf.lastError = error;
-        completeBlock(NO, weakSelf.lastError);
+        self.lastError = error;
+        completeBlock(NO, self.lastError);
         return;
     }
-    weakSelf.assetWriterInput = [AVAssetWriterInput assetWriterInputWithMediaType:AVMediaTypeAudio
-                                                                   outputSettings:[track compressionAudioSettingForPCMType]];
-    [weakSelf.assetWriter addInput:weakSelf.assetWriterInput];
+    self.assetWriterInput = [AVAssetWriterInput assetWriterInputWithMediaType:AVMediaTypeAudio
+                                                               outputSettings:[track compressionAudioSettingForPCMType]];
+    [self.assetWriter addInput:self.assetWriterInput];
     
-    if (![weakSelf.assetWriter startWriting]) {
-        weakSelf.lastError = [NSError ILABSessionError:ILABSessionErrorAVAssetWriterStartWriting];
-        completeBlock(NO, weakSelf.lastError);
+    if (![self.assetWriter startWriting]) {
+        self.lastError = [NSError ILABSessionError:ILABSessionErrorAVAssetWriterStartWriting];
+        completeBlock(NO, self.lastError);
         return;
     }
     
-    [weakSelf.assetWriter startSessionAtSourceTime:kCMTimeZero];
-
-    [weakSelf.assetWriterInput requestMediaDataWhenReadyOnQueue:[[self class] audioExportGenerateQueue] usingBlock:^{
-        while ([weakSelf.assetWriterInput isReadyForMoreMediaData]) {
-            CMSampleBufferRef nextSampleBuffer = [weakSelf.assetReaderOutput copyNextSampleBuffer];
-            if (weakSelf.isCanceled) {
-                weakSelf.lastError = [NSError ILABSessionError:ILABSessionErrorUserCancel];
-                completeBlock(NO, weakSelf.lastError);
+    [self.assetWriter startSessionAtSourceTime:kCMTimeZero];
+    
+    [self.assetWriterInput requestMediaDataWhenReadyOnQueue:[[self class] audioExportGenerateQueue] usingBlock:^{
+        while ([self.assetWriterInput isReadyForMoreMediaData]) {
+            CMSampleBufferRef nextSampleBuffer = [self.assetReaderOutput copyNextSampleBuffer];
+            if (self.isCanceled) {
+                self.lastError = [NSError ILABSessionError:ILABSessionErrorUserCancel];
+                completeBlock(NO, self.lastError);
                 CFRelease(nextSampleBuffer); nextSampleBuffer = NULL;
                 return;
             }
             if (nextSampleBuffer) {
-                [weakSelf.assetWriterInput appendSampleBuffer:nextSampleBuffer];
+                [self.assetWriterInput appendSampleBuffer:nextSampleBuffer];
                 CFRelease(nextSampleBuffer); nextSampleBuffer = NULL;
             } else {
-                [weakSelf.assetWriterInput markAsFinished];
-                [weakSelf.assetWriter finishWritingWithCompletionHandler:^{
+                [self.assetWriterInput markAsFinished];
+                [self.assetWriter finishWritingWithCompletionHandler:^{
                     completeBlock(YES, nil);
                 }];
                 break;
@@ -249,16 +240,14 @@
 -(void)exportingReverseToURL:(NSURL *)outputURL
              tmpAudioFileURL:(NSURL *)tmpAudioFileURL
                     complete:(ILABCompleteBlock)completeBlock {
-    __weak typeof(self) weakSelf = self;
-    
     // set up input file
     AudioFileID inputAudioFile;
     OSStatus theErr = AudioFileOpenURL((__bridge CFURLRef)tmpAudioFileURL,
                                        kAudioFileReadPermission, 0, &inputAudioFile);
     if (theErr != noErr) {
-        weakSelf.lastError = [NSError errorWithAudioFileStatusCode:theErr];
+        self.lastError = [NSError errorWithAudioFileStatusCode:theErr];
         if (completeBlock) {
-            completeBlock(NO, weakSelf.lastError);
+            completeBlock(NO, self.lastError);
         }
         return;
     }
@@ -268,9 +257,9 @@
     theErr = AudioFileGetProperty(inputAudioFile, kAudioFilePropertyDataFormat, &thePropertySize, &theFileFormat);
     if (theErr != noErr) {
         AudioFileClose(inputAudioFile);
-        weakSelf.lastError = [NSError errorWithAudioFileStatusCode:theErr];
+        self.lastError = [NSError errorWithAudioFileStatusCode:theErr];
         if (completeBlock) {
-            completeBlock(NO, weakSelf.lastError);
+            completeBlock(NO, self.lastError);
         }
         return;
     }
@@ -280,9 +269,9 @@
     theErr = AudioFileGetProperty(inputAudioFile, kAudioFilePropertyAudioDataByteCount, &thePropertySize, &fileDataSize);
     if (theErr != noErr) {
         AudioFileClose(inputAudioFile);
-        weakSelf.lastError = [NSError errorWithAudioFileStatusCode:theErr];
+        self.lastError = [NSError errorWithAudioFileStatusCode:theErr];
         if (completeBlock) {
-            completeBlock(NO, weakSelf.lastError);
+            completeBlock(NO, self.lastError);
         }
         return;
     }
@@ -295,9 +284,9 @@
                                     &outputAudioFile);
     if (theErr != noErr) {
         AudioFileClose(inputAudioFile);
-        weakSelf.lastError = [NSError errorWithAudioFileStatusCode:theErr];
+        self.lastError = [NSError errorWithAudioFileStatusCode:theErr];
         if (completeBlock) {
-            completeBlock(NO, weakSelf.lastError);
+            completeBlock(NO, self.lastError);
         }
         return;
     }
@@ -309,7 +298,7 @@
         AudioFileClose(inputAudioFile);
         AudioFileClose(outputAudioFile);
         if (completeBlock) {
-            completeBlock(NO, weakSelf.lastError);
+            completeBlock(NO, self.lastError);
         }
         return;
     }
@@ -319,9 +308,9 @@
     if (theErr != noErr) {
         AudioFileClose(inputAudioFile);
         AudioFileClose(outputAudioFile);
-        weakSelf.lastError = [NSError errorWithAudioFileStatusCode:theErr];
+        self.lastError = [NSError errorWithAudioFileStatusCode:theErr];
         if (completeBlock) {
-            completeBlock(NO, weakSelf.lastError);
+            completeBlock(NO, self.lastError);
         }
         return;
     }
@@ -333,7 +322,7 @@
         AudioFileClose(inputAudioFile);
         AudioFileClose(outputAudioFile);
         if (completeBlock) {
-            completeBlock(NO, weakSelf.lastError);
+            completeBlock(NO, self.lastError);
         }
         return;
     }
@@ -350,9 +339,9 @@
         
         AudioFileClose(inputAudioFile);
         AudioFileClose(outputAudioFile);
-        weakSelf.lastError = [NSError errorWithAudioFileStatusCode:theErr];
+        self.lastError = [NSError errorWithAudioFileStatusCode:theErr];
         if (completeBlock) {
-            completeBlock(NO, weakSelf.lastError);
+            completeBlock(NO, self.lastError);
         }
         return;
     }

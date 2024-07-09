@@ -7,6 +7,7 @@
 
 #import "ILABTranscodeSession.h"
 #import "ILABAudioTrackExporter.h"
+#import "TRTransformAPI.h"
 
 @interface ILABTranscodeSession ()
 @property (nonatomic) BOOL sourceReady;
@@ -28,6 +29,7 @@
 @property (nonatomic, strong) AVAssetExportSession * exportSession;
 
 @property (nonatomic) BOOL availableHDR;
+@property (nonatomic) BOOL isProRes;
 @property (nonatomic) CMVideoCodecType sourceCodecType;
 @end
 
@@ -81,6 +83,7 @@ typedef void(^ILABGenerateAssetBlock)(BOOL isSuccess, AVAsset *asset, NSError *e
             [track hasMediaCharacteristic:AVMediaCharacteristicContainsHDRVideo]) {
             self.availableHDR = YES;
         }
+        self.isProRes = isProRes(track);
         self.size = self.sourceSize;
         self.frameRate = self.sourceFPS;
         CMFormatDescriptionRef ref = (__bridge CMFormatDescriptionRef)([track.formatDescriptions firstObject]);
@@ -99,121 +102,6 @@ typedef void(^ILABGenerateAssetBlock)(BOOL isSuccess, AVAsset *asset, NSError *e
     ILABTranscodeSession *session = [[[self class] alloc] initWithAsset:sourceAsset timeRange:timeRange];
     session.outputURL = outputURL;
     return session;
-}
-
--(NSDictionary *)videoDefaultCompressionProperties {
-    static const NSInteger fullHDProportion = 1920 * 1080;
-    
-    Float64 bitrate = ((self.size.width * self.size.height * self.frameRate * 0.17) / 1024) * 1000;
-    NSMutableDictionary *settings = [NSMutableDictionary dictionary];
-    
-    [settings setObject:@(self.estimatedDataRate == 0 ? bitrate : self.estimatedDataRate)
-                 forKey:AVVideoAverageBitRateKey];
-    [settings setObject:self.sourceSize.width * self.sourceSize.height > fullHDProportion ? @(YES) : @(NO)
-                 forKey:AVVideoAllowFrameReorderingKey];
-    if (self.sourceSize.width * self.sourceSize.height > fullHDProportion) {
-        [settings setObject:AVVideoProfileLevelH264HighAutoLevel
-                     forKey:AVVideoProfileLevelKey];
-        [settings setObject:AVVideoH264EntropyModeCABAC
-                     forKey:AVVideoH264EntropyModeKey];
-    } else {
-        [settings setObject:AVVideoProfileLevelH264MainAutoLevel
-                     forKey:AVVideoProfileLevelKey];
-    }
-    return settings;
-}
-
--(NSDictionary *)videoCompressionProperties {
-    static const NSInteger fullHDProportion = 1920 * 1080;
-    
-    Float64 bitrate = ((self.size.width * self.size.height * self.frameRate * 0.17) / 1024) * 1000;
-    NSMutableDictionary *settings = [NSMutableDictionary dictionary];
-    
-    [settings setObject:@(self.estimatedDataRate == 0 ? bitrate : self.estimatedDataRate)
-                 forKey:AVVideoAverageBitRateKey];
-    [settings setObject:self.sourceSize.width * self.sourceSize.height > fullHDProportion ? @(YES) : @(NO)
-                 forKey:AVVideoAllowFrameReorderingKey];
-    if (self.availableHDR) {
-        [settings setObject:(__bridge NSString*)kVTHDRMetadataInsertionMode_Auto
-                     forKey:(__bridge NSString*)kVTCompressionPropertyKey_HDRMetadataInsertionMode];
-        [settings setObject:(__bridge NSString*)kVTProfileLevel_HEVC_Main10_AutoLevel
-                     forKey:AVVideoProfileLevelKey];
-    } else {
-        if (self.sourceCodecType == kCMVideoCodecType_HEVC) {
-            [settings setObject:(__bridge NSString*)kVTProfileLevel_HEVC_Main_AutoLevel
-                         forKey:AVVideoProfileLevelKey];
-        } else {
-            if (self.sourceSize.width * self.sourceSize.height > fullHDProportion) {
-                [settings setObject:AVVideoProfileLevelH264HighAutoLevel
-                             forKey:AVVideoProfileLevelKey];
-                [settings setObject:AVVideoH264EntropyModeCABAC
-                             forKey:AVVideoH264EntropyModeKey];
-            } else {
-                [settings setObject:AVVideoProfileLevelH264MainAutoLevel
-                             forKey:AVVideoProfileLevelKey];
-            }
-        }
-    }
-    return settings;
-}
-
--(NSDictionary *)videoReaderSettings {
-    NSMutableDictionary *settings = [NSMutableDictionary dictionary];
-    if (self.availableHDR) {
-        [settings setObject:@(kCVPixelFormatType_420YpCbCr10BiPlanarVideoRange)
-                     forKey:(NSString *)kCVPixelBufferPixelFormatTypeKey];
-    } else {
-        [settings setObject:@(kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange)
-                     forKey:(NSString *)kCVPixelBufferPixelFormatTypeKey];
-    }
-    return settings;
-}
-
--(NSDictionary *)videoDefaultSettings {
-    NSMutableDictionary *settings = [NSMutableDictionary dictionary];
-
-    [settings setObject:@(self.size.width)
-                 forKey:AVVideoWidthKey];
-    [settings setObject:@(self.size.height)
-                 forKey:AVVideoHeightKey];
-    [settings setObject:AVVideoCodecTypeH264
-                 forKey:AVVideoCodecKey];
-    [settings setObject:self.videoDefaultCompressionProperties
-                 forKey:AVVideoCompressionPropertiesKey];
-
-    return settings;
-}
-
--(NSDictionary *)videoOutputSettings {
-    NSMutableDictionary *settings = [NSMutableDictionary dictionary];
-    
-    [settings setObject:@(self.size.width)
-                 forKey:AVVideoWidthKey];
-    [settings setObject:@(self.size.height)
-                 forKey:AVVideoHeightKey];
-    if (self.availableHDR) {
-        NSDictionary *colorProperties = @{
-            AVVideoColorPrimariesKey: AVVideoColorPrimaries_ITU_R_2020,
-            AVVideoTransferFunctionKey: AVVideoTransferFunction_ITU_R_2100_HLG,
-            AVVideoYCbCrMatrixKey: AVVideoYCbCrMatrix_ITU_R_2020
-        };
-        [settings setObject:AVVideoCodecTypeHEVC
-                     forKey:AVVideoCodecKey];
-        [settings setObject:colorProperties
-                     forKey:AVVideoColorPropertiesKey];
-    } else {
-        if (self.sourceCodecType == kCMVideoCodecType_HEVC) {
-            [settings setObject:AVVideoCodecTypeHEVC
-                         forKey:AVVideoCodecKey];
-        } else {
-            [settings setObject:AVVideoCodecTypeH264
-                         forKey:AVVideoCodecKey];
-        }
-    }
-    [settings setObject:self.videoCompressionProperties
-                 forKey:AVVideoCompressionPropertiesKey];
-
-    return settings;
 }
 
 -(void)configureSourceMeta {
@@ -315,14 +203,9 @@ typedef void(^ILABGenerateAssetBlock)(BOOL isSuccess, AVAsset *asset, NSError *e
         }
     }
     if (self.showDebug) {
-        if (self.availableHDR) {
-            NSLog(@"transcode availableHDR: YES");
-        }
+        NSLog(@"transcode availableHDR: %d, isProRes: %d", self.availableHDR, self.isProRes);
     }
-    __weak typeof(self) weakSelf = self;
-    dispatch_async([[self class] transcodeQueue], ^{
-        [weakSelf doTranscode:progressBlock complete:completeBlock];
-    });
+    [self doTranscode:progressBlock complete:completeBlock];
 }
 
 -(void)doTranscode:(ILABProgressBlock)progressBlock complete:(ILABCompleteBlock)completeBlock {
@@ -333,33 +216,35 @@ typedef void(^ILABGenerateAssetBlock)(BOOL isSuccess, AVAsset *asset, NSError *e
     NSURL *audioDestionationURL = [NSURL fileURLWithPath:[cachePath stringByAppendingFormat:@"/%@-tempAudio.m4a",[[NSUUID UUID] UUIDString]]];
     NSURL *videoDestinationURL = [NSURL fileURLWithPath:[cachePath stringByAppendingFormat:@"/%@-tempVideo.mov",[[NSUUID UUID] UUIDString]]];
     
-    [self transcodeAudioAtDestinationURL:audioDestionationURL completeBlcok:nil];
-    [self transcodeVideoAtDestinationURL:videoDestinationURL
-                                progress:progressBlock
-                           completeBlock:^(BOOL isSuccess, AVAsset *transcodedVideoAsset, NSError *error) {
-        if (!transcodedVideoAsset) {
-            if (completeBlock) {
-                completeBlock(NO, error);
+    [self transcodeAudioAtDestinationURL:audioDestionationURL completeBlock:^(BOOL complete, NSError *error) {
+        [weakSelf transcodeVideoAtDestinationURL:videoDestinationURL
+                                    progress:progressBlock
+                               completeBlock:^(BOOL isSuccess, AVAsset *transcodedVideoAsset, NSError *error) {
+            if (!transcodedVideoAsset) {
+                if (completeBlock) {
+                    completeBlock(NO, error);
+                }
+                //
+                if (weakSelf.deleteCacheFile) {
+                    [[NSFileManager defaultManager] removeItemAtURL:audioDestionationURL error:nil];
+                    [[NSFileManager defaultManager] removeItemAtURL:videoDestinationURL error:nil];
+                }
+                return;
             }
+            
+            [weakSelf exportAtDestinationURL:weakSelf.outputURL
+                                   videoAsset:transcodedVideoAsset
+                                   audioAsset:weakSelf.transcodedAudioAsset
+                                progressBlock:progressBlock
+                                     complete:completeBlock
+             ];
             //
             if (weakSelf.deleteCacheFile) {
                 [[NSFileManager defaultManager] removeItemAtURL:audioDestionationURL error:nil];
                 [[NSFileManager defaultManager] removeItemAtURL:videoDestinationURL error:nil];
             }
-            return;
-        }
-        
-        [weakSelf exportAtDestinationURL:weakSelf.outputURL
-                               videoAsset:transcodedVideoAsset
-                               audioAsset:weakSelf.transcodedAudioAsset
-                            progressBlock:progressBlock
-                                 complete:completeBlock
-         ];
-        //
-        if (self.deleteCacheFile) {
-            [[NSFileManager defaultManager] removeItemAtURL:audioDestionationURL error:nil];
-            [[NSFileManager defaultManager] removeItemAtURL:videoDestinationURL error:nil];
-        }
+        }];
+
     }];
 }
 
@@ -475,47 +360,38 @@ typedef void(^ILABGenerateAssetBlock)(BOOL isSuccess, AVAsset *asset, NSError *e
     dispatch_async([[self class] transcodeGenerateQueue], ^{
         ILABAudioTrackExporter *audioExporter = [[ILABAudioTrackExporter alloc] initWithAsset:weakSelf.sourceAsset trackIndex:0 timeRange:weakSelf.timeRange];
         
-        dispatch_semaphore_t audioExportSemi = dispatch_semaphore_create(0);
         [audioExporter exportInM4ATo:destinationURL
                           completion:^(BOOL complete, NSError *error) {
             _error = error;
-            result = complete;
-            dispatch_semaphore_signal(audioExportSemi);
+            if (complete) {
+                resultsBlock(YES, [AVURLAsset assetWithURL:destinationURL], nil);
+            } else {
+                resultsBlock(NO, nil, _error);
+            }
         }];
-        dispatch_semaphore_wait(audioExportSemi, DISPATCH_TIME_FOREVER);
-        
-        if (result) {
-            resultsBlock(YES, [AVURLAsset assetWithURL:destinationURL], nil);
-        } else {
-            resultsBlock(NO, nil, _error);
-        }
     });
 }
 
--(void)transcodeAudioAtDestinationURL:(NSURL *)destinationURL completeBlcok:(ILABCompleteBlock)completeBlock {
-    if (self.sourceAudioTracks== 0) return;
+-(void)transcodeAudioAtDestinationURL:(NSURL *)destinationURL completeBlock:(ILABCompleteBlock)completeBlock {
+    if (self.sourceAudioTracks== 0) {
+        completeBlock(YES, nil);
+        return;
+    };
     
     __weak typeof(self) weakSelf = self;
-    __block NSError *_error = nil;
-
-    dispatch_semaphore_t audioSema = dispatch_semaphore_create(0);
     [self transcodingAudioAtDestinationURL:destinationURL
                               completBlock:^(BOOL isSuccess, AVAsset *transcodedAudioAsset, NSError *error) {
         if (isSuccess) {
             weakSelf.transcodedAudioAsset = transcodedAudioAsset;
+            if (completeBlock) {
+                completeBlock(YES, nil);
+            }
         } else {
-            _error = error;
+            if (completeBlock) {
+                completeBlock(NO, error);
+            }
         }
-        dispatch_semaphore_signal(audioSema);
     }];
-    
-    dispatch_semaphore_wait(audioSema, DISPATCH_TIME_FOREVER);
-    
-    if (_error != nil) {
-        if (completeBlock) {
-            completeBlock(NO, _error);
-        }
-    }
 }
 
 - (void)transcodeVideoAtDestinationURL:(NSURL *)destinationURL progress:(ILABProgressBlock)progressBlock completeBlock:(ILABGenerateAssetBlock)completeBlock {
@@ -533,9 +409,10 @@ typedef void(^ILABGenerateAssetBlock)(BOOL isSuccess, AVAsset *asset, NSError *e
             completeBlock(NO, nil, error);
             return;
         }
+        NSDictionary *outputSettings = makeVideoReaderSettings(self.availableHDR, self.isProRes);
         AVAssetReaderTrackOutput *assetReaderOutput = [AVAssetReaderTrackOutput
                                                        assetReaderTrackOutputWithTrack:[weakSelf.transcodingVideoAsset tracksWithMediaType:AVMediaTypeVideo].firstObject
-                                                       outputSettings:weakSelf.videoReaderSettings];
+                                                       outputSettings:outputSettings];
         assetReaderOutput.supportsRandomAccess = YES;
         [assetReader addOutput:assetReaderOutput];
         
@@ -552,11 +429,26 @@ typedef void(^ILABGenerateAssetBlock)(BOOL isSuccess, AVAsset *asset, NSError *e
         BOOL firstTry = YES;
 
         do {
+            NSDictionary *compressionProperties = makeCompressionProperties(
+                self.size,
+                self.frameRate,
+                self.estimatedDataRate,
+                self.sourceCodecType,
+                self.availableHDR,
+                self.isProRes
+            );
+            NSDictionary *outputSettings = makeVideoOutputSettings(
+                self.size,
+                self.sourceCodecType,
+                self.availableHDR,
+                compressionProperties
+            );
+            NSDictionary *defaultSettings = makeVideoDefaultSettings(self.size, compressionProperties);
             assetWriter = [AVAssetWriter assetWriterWithURL:destinationURL
                                                    fileType:AVFileTypeQuickTimeMovie
                                                       error:&error];
             assetWriterInput = [AVAssetWriterInput assetWriterInputWithMediaType:AVMediaTypeVideo
-                                                                  outputSettings:firstTry ? weakSelf.videoOutputSettings : weakSelf.videoDefaultSettings];
+                                                                  outputSettings:firstTry ? outputSettings : defaultSettings];
             assetWriterInput.expectsMediaDataInRealTime = NO;
             assetWriterInput.transform = weakSelf.sourceTransform;
             
