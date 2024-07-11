@@ -324,11 +324,6 @@ typedef void(^ILABGenerateAssetBlock)(BOOL isSuccess, AVAsset *asset, NSError *e
                                                      withAsset:muxComp
                                                 outputFileType:outputType
                                              completionHandler:^(BOOL compatible) {
-        if (progressBlock) {
-            [weakSelf updateProgressBlock:progressBlock
-                            operation:@"Finishing Up"
-                             progress:INFINITY];
-        }
         if (compatible) {
             weakSelf.exportSession = [AVAssetExportSession exportSessionWithAsset:muxComp
                                                                        presetName:preset];
