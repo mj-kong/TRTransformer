@@ -353,11 +353,12 @@ typedef void(^ILABGenerateAssetBlock)(BOOL isSuccess, AVAsset *asset, NSError *e
 -(void)reversingAudioAtDestinationURL:(NSURL *)destinationURL completBlock:(ILABGenerateAssetBlock)resultsBlock {
     __weak typeof(self) weakSelf = self;
     
+    self.audioExporter = [[ILABAudioTrackExporter alloc] initWithAsset:self.sourceAsset trackIndex:0 timeRange:self.timeRange];
+
     dispatch_async([[self class] reverseGenerateQueue], ^{
-        weakSelf.audioExporter = [[ILABAudioTrackExporter alloc] initWithAsset:weakSelf.sourceAsset trackIndex:0 timeRange:weakSelf.timeRange];
 
         [weakSelf.audioExporter exportReverseToURL:destinationURL
-                                      complete:^(BOOL isSuccess, NSError *error) {
+                                          complete:^(BOOL isSuccess, NSError *error) {
             weakSelf.audioExporter = nil;
             if (error) {
                 weakSelf.lastError = error;
@@ -569,7 +570,6 @@ typedef void(^ILABGenerateAssetBlock)(BOOL isSuccess, AVAsset *asset, NSError *e
         do {
             NSDictionary *compressionProperties = makeCompressionProperties(
                 self.sourceSize,
-                self.sourceFPS,
                 self.sourceEstimatedDataRate,
                 self.sourceCodecType,
                 self.availableHDR,
@@ -581,7 +581,8 @@ typedef void(^ILABGenerateAssetBlock)(BOOL isSuccess, AVAsset *asset, NSError *e
                 self.availableHDR,
                 compressionProperties
             );
-            NSDictionary *defaultSettings = makeVideoDefaultSettings(self.sourceSize, compressionProperties);
+            NSDictionary *defaultCompressionProperties = makeDefaultCompressionProperties(self.sourceSize, self.sourceEstimatedDataRate);
+            NSDictionary *defaultSettings = makeVideoDefaultSettings(self.sourceSize, defaultCompressionProperties);
             assetWriter = [AVAssetWriter assetWriterWithURL:destinationURL
                                                    fileType:AVFileTypeQuickTimeMovie
                                                       error:&error];

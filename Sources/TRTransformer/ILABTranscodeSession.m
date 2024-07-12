@@ -27,6 +27,7 @@
 @property (nonatomic, strong) AVAsset * transcodingVideoAsset;
 @property (nonatomic, strong) AVAsset * transcodedAudioAsset;
 @property (nonatomic, strong) AVAssetExportSession * exportSession;
+@property (nonatomic, strong) ILABAudioTrackExporter* audioExporter;
 
 @property (nonatomic) BOOL availableHDR;
 @property (nonatomic) BOOL isProRes;
@@ -352,16 +353,19 @@ typedef void(^ILABGenerateAssetBlock)(BOOL isSuccess, AVAsset *asset, NSError *e
     __block BOOL result = NO;
     __block NSError *_error = nil;
     
+    self.audioExporter = [[ILABAudioTrackExporter alloc] initWithAsset:self.sourceAsset trackIndex:0 timeRange:self.timeRange];
+    
     dispatch_async([[self class] transcodeGenerateQueue], ^{
-        ILABAudioTrackExporter *audioExporter = [[ILABAudioTrackExporter alloc] initWithAsset:weakSelf.sourceAsset trackIndex:0 timeRange:weakSelf.timeRange];
-        
-        [audioExporter exportInM4ATo:destinationURL
-                          completion:^(BOOL complete, NSError *error) {
-            _error = error;
+        [weakSelf.audioExporter exportInM4ATo:destinationURL
+                                   completion:^(BOOL complete, NSError *error) {
+            weakSelf.audioExporter = nil;
+            if (error) {
+                weakSelf.lastError = error;
+            }
             if (complete) {
                 resultsBlock(YES, [AVURLAsset assetWithURL:destinationURL], nil);
             } else {
-                resultsBlock(NO, nil, _error);
+                resultsBlock(NO, nil, weakSelf.lastError);
             }
         }];
     });
@@ -424,10 +428,10 @@ typedef void(^ILABGenerateAssetBlock)(BOOL isSuccess, AVAsset *asset, NSError *e
         BOOL firstTry = YES;
 
         do {
+            CGFloat estimatedDataRate = ((self.size.width * self.size.height * self.frameRate * 0.17) / 1024) * 1000;
             NSDictionary *compressionProperties = makeCompressionProperties(
-                self.size,
-                self.frameRate,
-                self.estimatedDataRate,
+                self.sourceSize,
+                estimatedDataRate,
                 self.sourceCodecType,
                 self.availableHDR,
                 self.isProRes
@@ -438,7 +442,8 @@ typedef void(^ILABGenerateAssetBlock)(BOOL isSuccess, AVAsset *asset, NSError *e
                 self.availableHDR,
                 compressionProperties
             );
-            NSDictionary *defaultSettings = makeVideoDefaultSettings(self.size, compressionProperties);
+            NSDictionary *defaultCompressionProperties = makeDefaultCompressionProperties(self.sourceSize, estimatedDataRate);
+            NSDictionary *defaultSettings = makeVideoDefaultSettings(self.size, defaultCompressionProperties);
             assetWriter = [AVAssetWriter assetWriterWithURL:destinationURL
                                                    fileType:AVFileTypeQuickTimeMovie
                                                       error:&error];

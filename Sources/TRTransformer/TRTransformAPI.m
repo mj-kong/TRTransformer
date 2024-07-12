@@ -32,15 +32,14 @@ BOOL isProRes(AVAssetTrack * track) {
     return NO;
 }
 
-NSDictionary * makeCompressionProperties(CGSize size, CGFloat frameRate, CGFloat estimatedDataRate, CMVideoCodecType sourceCodecType, BOOL availableHDR, BOOL isProRes) {
+NSDictionary * makeCompressionProperties(CGSize size, CGFloat estimatedDataRate, CMVideoCodecType sourceCodecType, BOOL availableHDR, BOOL isProRes) {
     static const NSInteger fullHDProportion = 1920 * 1080;
-    
-    Float64 bitrate = ((size.width * size.height * frameRate * 0.17) / 1024) * 1000;
+
     NSMutableDictionary *settings = [NSMutableDictionary dictionary];
     
     if (availableHDR) {
         if (!isProRes) {
-            [settings setObject:@(estimatedDataRate == 0 ? bitrate : estimatedDataRate)
+            [settings setObject:@(estimatedDataRate)
                          forKey:AVVideoAverageBitRateKey];
             [settings setObject:size.width * size.height > fullHDProportion ? @(YES) : @(NO)
                          forKey:AVVideoAllowFrameReorderingKey];
@@ -51,7 +50,7 @@ NSDictionary * makeCompressionProperties(CGSize size, CGFloat frameRate, CGFloat
         }
     } else {
         if (!isProRes) {
-            [settings setObject:@(estimatedDataRate == 0 ? bitrate : estimatedDataRate)
+            [settings setObject:@(estimatedDataRate)
                          forKey:AVVideoAverageBitRateKey];
             [settings setObject:size.width * size.height > fullHDProportion ? @(YES) : @(NO)
                          forKey:AVVideoAllowFrameReorderingKey];
@@ -137,6 +136,27 @@ NSDictionary * makeVideoOutputSettings(CGSize size, CMVideoCodecType sourceCodec
         };
         [settings setObject:colorProperties
                      forKey:AVVideoColorPropertiesKey];
+    }
+    return settings;
+}
+
+NSDictionary * makeDefaultCompressionProperties(CGSize size, CGFloat estimatedDataRate) {
+    static const NSInteger fullHDProportion = 1920 * 1080;
+    
+    NSMutableDictionary *settings = [NSMutableDictionary dictionary];
+    
+    [settings setObject:@(estimatedDataRate)
+                 forKey:AVVideoAverageBitRateKey];
+    [settings setObject:size.width * size.height > fullHDProportion ? @(YES) : @(NO)
+                 forKey:AVVideoAllowFrameReorderingKey];
+    if (size.width * size.height > fullHDProportion) {
+        [settings setObject:AVVideoProfileLevelH264HighAutoLevel
+                     forKey:AVVideoProfileLevelKey];
+        [settings setObject:AVVideoH264EntropyModeCABAC
+                     forKey:AVVideoH264EntropyModeKey];
+    } else {
+        [settings setObject:AVVideoProfileLevelH264MainAutoLevel
+                     forKey:AVVideoProfileLevelKey];
     }
     return settings;
 }
