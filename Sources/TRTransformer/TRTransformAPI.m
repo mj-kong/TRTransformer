@@ -11,15 +11,16 @@
 
 #import "TRTransformAPI.h"
 
-BOOL isProRes(AVAssetTrack * track) {
+BOOL isProResType(AVAssetTrack * track) {
     for (id formatDescription in track.formatDescriptions) {
         CMFormatDescriptionRef desc = (__bridge CMFormatDescriptionRef)formatDescription;
         FourCharCode codecType = CMFormatDescriptionGetMediaSubType(desc);
         
         switch (codecType) {
-            case kCMVideoCodecType_AppleProRes422:
+            case kCMVideoCodecType_AppleProRes4444XQ:
             case kCMVideoCodecType_AppleProRes4444:
             case kCMVideoCodecType_AppleProRes422HQ:
+            case kCMVideoCodecType_AppleProRes422:
             case kCMVideoCodecType_AppleProRes422LT:
             case kCMVideoCodecType_AppleProRes422Proxy:
             case kCMVideoCodecType_AppleProResRAW:
@@ -32,32 +33,33 @@ BOOL isProRes(AVAssetTrack * track) {
     return NO;
 }
 
-NSDictionary * makeCompressionProperties(CGSize size, CGFloat estimatedDataRate, CMVideoCodecType sourceCodecType, BOOL availableHDR, BOOL isProRes) {
+NSDictionary * makeCompressionProperties(CGSize size, CGFloat estimatedDataRate, CMVideoCodecType sourceCodecType, BOOL containsHDRVideo) {
     static const NSInteger fullHDProportion = 1920 * 1080;
-
+    
     NSMutableDictionary *settings = [NSMutableDictionary dictionary];
     
-    if (availableHDR) {
-        if (!isProRes) {
-            [settings setObject:@(estimatedDataRate)
-                         forKey:AVVideoAverageBitRateKey];
-            [settings setObject:size.width * size.height > fullHDProportion ? @(YES) : @(NO)
-                         forKey:AVVideoAllowFrameReorderingKey];
-            [settings setObject:(__bridge NSString*)kVTHDRMetadataInsertionMode_Auto
-                         forKey:(__bridge NSString*)kVTCompressionPropertyKey_HDRMetadataInsertionMode];
-            [settings setObject:(__bridge NSString*)kVTProfileLevel_HEVC_Main10_AutoLevel
-                         forKey:AVVideoProfileLevelKey];
-        }
+    if (containsHDRVideo) {
+        [settings setObject:@(estimatedDataRate)
+                     forKey:AVVideoAverageBitRateKey];
+        [settings setObject:size.width * size.height > fullHDProportion ? @(YES) : @(NO)
+                     forKey:AVVideoAllowFrameReorderingKey];
+        [settings setObject:(__bridge NSString*)kVTHDRMetadataInsertionMode_Auto
+                     forKey:(__bridge NSString*)kVTCompressionPropertyKey_HDRMetadataInsertionMode];
+        [settings setObject:(__bridge NSString*)kVTProfileLevel_HEVC_Main10_AutoLevel
+                     forKey:AVVideoProfileLevelKey];
     } else {
-        if (!isProRes) {
-            [settings setObject:@(estimatedDataRate)
-                         forKey:AVVideoAverageBitRateKey];
-            [settings setObject:size.width * size.height > fullHDProportion ? @(YES) : @(NO)
-                         forKey:AVVideoAllowFrameReorderingKey];
-            if (sourceCodecType == kCMVideoCodecType_HEVC) {
+        [settings setObject:@(estimatedDataRate)
+                     forKey:AVVideoAverageBitRateKey];
+        [settings setObject:size.width * size.height > fullHDProportion ? @(YES) : @(NO)
+                     forKey:AVVideoAllowFrameReorderingKey];
+        switch (sourceCodecType) {
+            case kCMVideoCodecType_HEVC:
+            case kCMVideoCodecType_HEVCWithAlpha:
+            case kCMVideoCodecType_AppleProRes4444XQ:
                 [settings setObject:(__bridge NSString*)kVTProfileLevel_HEVC_Main_AutoLevel
                              forKey:AVVideoProfileLevelKey];
-            } else {
+                break;
+            default:
                 if (size.width * size.height > fullHDProportion) {
                     [settings setObject:AVVideoProfileLevelH264HighAutoLevel
                                  forKey:AVVideoProfileLevelKey];
@@ -67,19 +69,22 @@ NSDictionary * makeCompressionProperties(CGSize size, CGFloat estimatedDataRate,
                     [settings setObject:AVVideoProfileLevelH264MainAutoLevel
                                  forKey:AVVideoProfileLevelKey];
                 }
-            }
+                break;
         }
     }
     return settings;
 }
 
-NSDictionary * makeVideoReaderSettings(BOOL availableHDR, BOOL isProRes) {
+NSDictionary * makeVideoReaderSettings(BOOL containsHDRVideo, BOOL containsAlphaChannel, BOOL isProResType) {
     NSMutableDictionary *settings = [NSMutableDictionary dictionary];
-    if (isProRes) {
-        [settings setObject:@(kCVPixelFormatType_4444AYpCbCr16)
-                     forKey:(NSString *)kCVPixelBufferPixelFormatTypeKey];
-    } else if (availableHDR) {
+    if (containsHDRVideo) {
         [settings setObject:@(kCVPixelFormatType_420YpCbCr10BiPlanarVideoRange)
+                     forKey:(NSString *)kCVPixelBufferPixelFormatTypeKey];
+    } else if (containsAlphaChannel) {
+        [settings setObject:@(kCVPixelFormatType_32ARGB)
+                     forKey:(NSString *)kCVPixelBufferPixelFormatTypeKey];
+    } else if (isProResType) {
+        [settings setObject:@(kCVPixelFormatType_4444AYpCbCr16)
                      forKey:(NSString *)kCVPixelBufferPixelFormatTypeKey];
     } else {
         [settings setObject:@(kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange)
@@ -103,32 +108,37 @@ NSDictionary * makeVideoDefaultSettings(CGSize size, NSDictionary * compressionP
     return settings;
 }
 
-AVVideoCodecType convertToCodecType(CMVideoCodecType codecType) {
-    // 우리쪽에서 사용되는 경우만 모아놓음.
+AVVideoCodecType convertToCodecType(CMVideoCodecType codecType, BOOL containsAlphaChannel) {
     switch (codecType) {
-        case kCMVideoCodecType_AppleProRes4444XQ: return AVVideoCodecTypeAppleProRes4444;
-        case kCMVideoCodecType_AppleProRes4444: return AVVideoCodecTypeAppleProRes4444;
-        case kCMVideoCodecType_AppleProRes422HQ: return AVVideoCodecTypeAppleProRes422HQ;
-        case kCMVideoCodecType_AppleProRes422: return AVVideoCodecTypeAppleProRes422;
-        case kCMVideoCodecType_AppleProRes422LT: return AVVideoCodecTypeAppleProRes422LT;
-        case kCMVideoCodecType_AppleProRes422Proxy: return AVVideoCodecTypeAppleProRes422Proxy;
-        case kCMVideoCodecType_HEVC: return AVVideoCodecTypeHEVC;
-        default: return AVVideoCodecTypeH264;
+        case kCMVideoCodecType_AppleProRes4444XQ:
+        case kCMVideoCodecType_HEVCWithAlpha:
+            return AVVideoCodecTypeHEVCWithAlpha;
+            
+        case kCMVideoCodecType_AppleProRes4444:
+        case kCMVideoCodecType_AppleProRes422HQ:
+        case kCMVideoCodecType_AppleProRes422:
+        case kCMVideoCodecType_AppleProRes422LT:
+        case kCMVideoCodecType_AppleProRes422Proxy:
+        case kCMVideoCodecType_HEVC: 
+            return containsAlphaChannel ? AVVideoCodecTypeHEVCWithAlpha : AVVideoCodecTypeHEVC;
+            
+        default:
+            return AVVideoCodecTypeH264;
     }
 }
 
-NSDictionary * makeVideoOutputSettings(CGSize size, CMVideoCodecType sourceCodecType, BOOL availableHDR, NSDictionary * compressionProperties) {
+NSDictionary * makeVideoOutputSettings(CGSize size, CMVideoCodecType sourceCodecType, BOOL containsHDRVideo, BOOL containsAlphaChannel, NSDictionary * compressionProperties) {
     NSMutableDictionary *settings = [NSMutableDictionary dictionary];
     
     [settings setObject:@(size.width)
                  forKey:AVVideoWidthKey];
     [settings setObject:@(size.height)
                  forKey:AVVideoHeightKey];
-    [settings setObject: convertToCodecType(sourceCodecType)
+    [settings setObject: convertToCodecType(sourceCodecType, containsAlphaChannel)
                  forKey:AVVideoCodecKey];
     [settings setObject:compressionProperties
                  forKey:AVVideoCompressionPropertiesKey];
-    if (availableHDR) {
+    if (containsHDRVideo) {
         NSDictionary *colorProperties = @{
             AVVideoColorPrimariesKey: AVVideoColorPrimaries_ITU_R_2020,
             AVVideoTransferFunctionKey: AVVideoTransferFunction_ITU_R_2100_HLG,

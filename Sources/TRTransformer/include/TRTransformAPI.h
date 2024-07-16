@@ -12,9 +12,9 @@
 #import <AVFoundation/AVFoundation.h>
 #import <VideoToolbox/VideoToolbox.h>
 
-BOOL isProRes(AVAssetTrack * track);
-NSDictionary * makeCompressionProperties(CGSize size, CGFloat estimatedDataRate, CMVideoCodecType sourceCodecType, BOOL availableHDR, BOOL isProRes);
-NSDictionary * makeVideoReaderSettings(BOOL availableHDR, BOOL isProRes);
+BOOL isProResType(AVAssetTrack * track);
+NSDictionary * makeCompressionProperties(CGSize size, CGFloat estimatedDataRate, CMVideoCodecType sourceCodecType, BOOL containsHDRVideo);
+NSDictionary * makeVideoReaderSettings(BOOL containsHDRVideo, BOOL containsAlphaChannel, BOOL isProResType);
 NSDictionary * makeVideoDefaultSettings(CGSize size, NSDictionary * compressionProperties);
-NSDictionary * makeVideoOutputSettings(CGSize size, CMVideoCodecType sourceCodecType, BOOL availableHDR, NSDictionary * compressionProperties);
+NSDictionary * makeVideoOutputSettings(CGSize size, CMVideoCodecType sourceCodecType, BOOL containsHDRVideo, BOOL containsAlphaChannel, NSDictionary * compressionProperties);
 NSDictionary * makeDefaultCompressionProperties(CGSize size, CGFloat estimatedDataRate);

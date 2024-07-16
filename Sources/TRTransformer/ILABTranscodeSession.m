@@ -29,8 +29,9 @@
 @property (nonatomic, strong) AVAssetExportSession * exportSession;
 @property (nonatomic, strong) ILABAudioTrackExporter* audioExporter;
 
-@property (nonatomic) BOOL availableHDR;
-@property (nonatomic) BOOL isProRes;
+@property (nonatomic) BOOL containsHDRVideo;
+@property (nonatomic) BOOL isProResType;
+@property (nonatomic) BOOL containsAlphaChannel;
 @property (nonatomic) CMVideoCodecType sourceCodecType;
 @end
 
@@ -82,13 +83,14 @@ typedef void(^ILABGenerateAssetBlock)(BOOL isSuccess, AVAsset *asset, NSError *e
 
         if (AVPlayer.eligibleForHDRPlayback &&
             [track hasMediaCharacteristic:AVMediaCharacteristicContainsHDRVideo]) {
-            self.availableHDR = YES;
+            self.containsHDRVideo = YES;
         }
-        self.isProRes = isProRes(track);
+        self.isProResType = isProResType(track);
         self.size = self.sourceSize;
         self.frameRate = self.sourceFPS;
         CMFormatDescriptionRef ref = (__bridge CMFormatDescriptionRef)([track.formatDescriptions firstObject]);
         self.sourceCodecType = CMFormatDescriptionGetMediaSubType(ref);
+        self.containsAlphaChannel = CMFormatDescriptionGetExtension(ref, kCMFormatDescriptionExtension_ContainsAlphaChannel) != NULL;
     }
     return self;
 }
@@ -204,7 +206,7 @@ typedef void(^ILABGenerateAssetBlock)(BOOL isSuccess, AVAsset *asset, NSError *e
         }
     }
     if (self.showDebug) {
-        NSLog(@"transcode availableHDR: %d, isProRes: %d", self.availableHDR, self.isProRes);
+        NSLog(@"transcode containsHDRVideo: %d, isProResType: %d", self.containsHDRVideo, self.isProResType);
     }
     [self doTranscode:progressBlock complete:completeBlock];
 }
@@ -408,7 +410,7 @@ typedef void(^ILABGenerateAssetBlock)(BOOL isSuccess, AVAsset *asset, NSError *e
             completeBlock(NO, nil, error);
             return;
         }
-        NSDictionary *outputSettings = makeVideoReaderSettings(self.availableHDR, self.isProRes);
+        NSDictionary *outputSettings = makeVideoReaderSettings(self.containsHDRVideo, self.containsAlphaChannel, self.isProResType);
         AVAssetReaderTrackOutput *assetReaderOutput = [AVAssetReaderTrackOutput
                                                        assetReaderTrackOutputWithTrack:[weakSelf.transcodingVideoAsset tracksWithMediaType:AVMediaTypeVideo].firstObject
                                                        outputSettings:outputSettings];
@@ -433,13 +435,13 @@ typedef void(^ILABGenerateAssetBlock)(BOOL isSuccess, AVAsset *asset, NSError *e
                 self.sourceSize,
                 estimatedDataRate,
                 self.sourceCodecType,
-                self.availableHDR,
-                self.isProRes
+                self.containsHDRVideo
             );
             NSDictionary *outputSettings = makeVideoOutputSettings(
                 self.size,
                 self.sourceCodecType,
-                self.availableHDR,
+                self.containsHDRVideo,
+                self.containsAlphaChannel,
                 compressionProperties
             );
             NSDictionary *defaultCompressionProperties = makeDefaultCompressionProperties(self.sourceSize, estimatedDataRate);
