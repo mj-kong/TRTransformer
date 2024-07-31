@@ -33,6 +33,22 @@ BOOL isProResType(AVAssetTrack * track) {
     return NO;
 }
 
+BOOL isProResCodec(CMVideoCodecType codecType) {
+    switch (codecType) {
+        case kCMVideoCodecType_AppleProRes4444XQ:
+        case kCMVideoCodecType_AppleProRes4444:
+        case kCMVideoCodecType_AppleProRes422HQ:
+        case kCMVideoCodecType_AppleProRes422:
+        case kCMVideoCodecType_AppleProRes422LT:
+        case kCMVideoCodecType_AppleProRes422Proxy:
+        case kCMVideoCodecType_AppleProResRAW:
+        case kCMVideoCodecType_AppleProResRAWHQ:
+            return YES;
+        default:
+            return NO;
+    }
+}
+
 NSDictionary * makeCompressionProperties(CGSize size, CGFloat estimatedDataRate, CMVideoCodecType sourceCodecType, BOOL containsHDRVideo) {
     static const NSInteger fullHDProportion = 1920 * 1080;
     
@@ -45,31 +61,31 @@ NSDictionary * makeCompressionProperties(CGSize size, CGFloat estimatedDataRate,
                      forKey:AVVideoAllowFrameReorderingKey];
         [settings setObject:(__bridge NSString*)kVTHDRMetadataInsertionMode_Auto
                      forKey:(__bridge NSString*)kVTCompressionPropertyKey_HDRMetadataInsertionMode];
-        [settings setObject:(__bridge NSString*)kVTProfileLevel_HEVC_Main10_AutoLevel
-                     forKey:AVVideoProfileLevelKey];
+        if (isProResCodec(sourceCodecType) || sourceCodecType == kCMVideoCodecType_HEVC || sourceCodecType == kCMVideoCodecType_HEVCWithAlpha) {
+            [settings setObject:(__bridge NSString*)kVTProfileLevel_HEVC_Main_AutoLevel
+                         forKey:AVVideoProfileLevelKey];
+        } else {
+            [settings setObject:(__bridge NSString*)kVTProfileLevel_HEVC_Main10_AutoLevel
+                         forKey:AVVideoProfileLevelKey];
+        }
     } else {
         [settings setObject:@(estimatedDataRate)
                      forKey:AVVideoAverageBitRateKey];
         [settings setObject:size.width * size.height > fullHDProportion ? @(YES) : @(NO)
                      forKey:AVVideoAllowFrameReorderingKey];
-        switch (sourceCodecType) {
-            case kCMVideoCodecType_HEVC:
-            case kCMVideoCodecType_HEVCWithAlpha:
-            case kCMVideoCodecType_AppleProRes4444XQ:
-                [settings setObject:(__bridge NSString*)kVTProfileLevel_HEVC_Main_AutoLevel
+        if (isProResCodec(sourceCodecType) || sourceCodecType == kCMVideoCodecType_HEVC || sourceCodecType == kCMVideoCodecType_HEVCWithAlpha) {
+            [settings setObject:(__bridge NSString*)kVTProfileLevel_HEVC_Main_AutoLevel
+                         forKey:AVVideoProfileLevelKey];
+        } else {
+            if (size.width * size.height > fullHDProportion) {
+                [settings setObject:AVVideoProfileLevelH264HighAutoLevel
                              forKey:AVVideoProfileLevelKey];
-                break;
-            default:
-                if (size.width * size.height > fullHDProportion) {
-                    [settings setObject:AVVideoProfileLevelH264HighAutoLevel
-                                 forKey:AVVideoProfileLevelKey];
-                    [settings setObject:AVVideoH264EntropyModeCABAC
-                                 forKey:AVVideoH264EntropyModeKey];
-                } else {
-                    [settings setObject:AVVideoProfileLevelH264MainAutoLevel
-                                 forKey:AVVideoProfileLevelKey];
-                }
-                break;
+                [settings setObject:AVVideoH264EntropyModeCABAC
+                             forKey:AVVideoH264EntropyModeKey];
+            } else {
+                [settings setObject:AVVideoProfileLevelH264MainAutoLevel
+                             forKey:AVVideoProfileLevelKey];
+            }
         }
     }
     return settings;

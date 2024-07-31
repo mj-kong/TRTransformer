@@ -13,6 +13,7 @@
 #import <VideoToolbox/VideoToolbox.h>
 
 BOOL isProResType(AVAssetTrack * track);
+BOOL isProResCodec(CMVideoCodecType codecType);
 NSDictionary * makeCompressionProperties(CGSize size, CGFloat estimatedDataRate, CMVideoCodecType sourceCodecType, BOOL containsHDRVideo);
 NSDictionary * makeVideoReaderSettings(BOOL containsHDRVideo, BOOL containsAlphaChannel, BOOL isProResType);
 NSDictionary * makeVideoDefaultSettings(CGSize size, NSDictionary * compressionProperties);
