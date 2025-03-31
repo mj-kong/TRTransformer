@@ -31,6 +31,7 @@
 
 @property (nonatomic) BOOL containsHDRVideo;
 @property (nonatomic) BOOL isProResType;
+@property (nonatomic) BOOL isDolbyVisionType;
 @property (nonatomic) BOOL containsAlphaChannel;
 @property (nonatomic) CMVideoCodecType sourceCodecType;
 @end
@@ -86,6 +87,7 @@ typedef void(^ILABGenerateAssetBlock)(BOOL isSuccess, AVAsset *asset, NSError *e
             self.containsHDRVideo = YES;
         }
         self.isProResType = isProResType(track);
+        self.isDolbyVisionType = isDolbyVisionType(track);
         self.size = self.sourceSize;
         self.frameRate = self.sourceFPS;
         CMFormatDescriptionRef ref = (__bridge CMFormatDescriptionRef)([track.formatDescriptions firstObject]);
@@ -435,7 +437,8 @@ typedef void(^ILABGenerateAssetBlock)(BOOL isSuccess, AVAsset *asset, NSError *e
                 self.sourceSize,
                 estimatedDataRate,
                 self.sourceCodecType,
-                self.containsHDRVideo
+                self.containsHDRVideo,
+                self.isDolbyVisionType
             );
             NSDictionary *outputSettings = makeVideoOutputSettings(
                 self.size,
