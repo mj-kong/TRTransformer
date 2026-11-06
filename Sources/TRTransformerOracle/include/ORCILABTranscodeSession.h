@@ -1,17 +1,17 @@
 //
-//  ILABTranscodeSession.h
+//  ORCILABTranscodeSession.h
 //
 //  Created by MJ.KONG-MAC on 2021/08/11.
 //  Copyright © 2021 Jon Gilkison. All rights reserved.
 //
 
-#import "ILABReverseVideoDefs.h"
+#import "ORCILABReverseVideoDefs.h"
 #import <AVFoundation/AVFoundation.h>
 #import <VideoToolbox/VideoToolbox.h>
 
 NS_ASSUME_NONNULL_BEGIN
 
-@interface ILABTranscodeSession : NSObject
+@interface ORCILABTranscodeSession : NSObject
 
 @property (readonly) BOOL sourceReady;                              /**< Source is loaded and ready to be */
 @property (readonly) NSInteger sourceVideoTracks;                   /**< Number of video tracks on source asset, anything beyond the 1st will be ignored/skipped */
@@ -23,7 +23,7 @@ NS_ASSUME_NONNULL_BEGIN
 @property (readonly) CGAffineTransform sourceTransform;             /**< Source transform */
 @property (readonly) CGSize sourceSize;                             /**< Natural size of the source asset */
 @property (readonly) NSInteger videoTrackIndex;                     /**< 0-based index into the source's video tracks to use, default 0 */
-@property (readonly) NSInteger audioTrackIndex;                     /**< 0-based audio track to use alone, or ILABAudioTrackIndexAll (default) to mix every audio track */
+@property (readonly) NSInteger audioTrackIndex;                     /**< 0-based audio track to use alone, or ORCILABAudioTrackIndexAll (default) to mix every audio track */
 
 @property (assign, nonatomic) BOOL showDebug;                       /**< Show debug output messages when reversing */
 @property (nonatomic, strong) NSURL *outputURL;                     /**< URL to output transcoded video to */
@@ -61,7 +61,7 @@ NS_ASSUME_NONNULL_BEGIN
 
 /**
  Create a new instance that reads the given video and audio streams (0-based, per media type); an audio index uses only that stream,
- ILABAudioTrackIndexAll mixes every audio stream (what the other inits do). An out-of-range index fails the transcode with ILABSessionErrorInvalidTrackIndex.
+ ORCILABAudioTrackIndexAll mixes every audio stream (what the other inits do). An out-of-range index fails the transcode with ORCILABSessionErrorInvalidTrackIndex.
  */
 -(instancetype)initWithAsset:(AVAsset *)sourceAsset timeRange:(CMTimeRange)timeRange videoTrackIndex:(NSInteger)videoTrackIndex audioTrackIndex:(NSInteger)audioTrackIndex;
 
@@ -85,7 +85,7 @@ NS_ASSUME_NONNULL_BEGIN
 +(instancetype)transcodeSessionWithAsset:(AVAsset *)sourceAsset timeRange:(CMTimeRange)timeRange outputURL:(NSURL *)outputURL;
 
 /**
- Creates a new session that reads the given video and audio streams (0-based, per media type, or ILABAudioTrackIndexAll).
+ Creates a new session that reads the given video and audio streams (0-based, per media type, or ORCILABAudioTrackIndexAll).
  */
 +(instancetype)transcodeSessionWithAsset:(AVAsset *)sourceAsset timeRange:(CMTimeRange)timeRange videoTrackIndex:(NSInteger)videoTrackIndex audioTrackIndex:(NSInteger)audioTrackIndex outputURL:(NSURL *)outputURL;
 
@@ -95,7 +95,7 @@ NS_ASSUME_NONNULL_BEGIN
  @param progressBlock Block to call to report progress of transcode
  @param completeBlock Block to call when export has completed
  */
--(void)transcodeAsynchronously:(ILABProgressBlock)progressBlock complete:(ILABCompleteBlock)completeBlock;
+-(void)transcodeAsynchronously:(ORCILABProgressBlock)progressBlock complete:(ORCILABCompleteBlock)completeBlock;
 
 /**
  Cancel the transcode process

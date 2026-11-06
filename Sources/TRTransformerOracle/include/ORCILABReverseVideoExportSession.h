@@ -1,20 +1,20 @@
 //
-//  ILABReverseVideoExportSession.h
-//  ILABReverseVideoExporter
+//  ORCILABReverseVideoExportSession.h
+//  ORCILABReverseVideoExporter
 //
 //  Created by Jon Gilkison on 8/15/17.
 //  Copyright © 2017 Jon Gilkison. All rights reserved.
 //  Copyright © 2017 chrissung. All rights reserved.
 //
 
-#import "ILABReverseVideoDefs.h"
+#import "ORCILABReverseVideoDefs.h"
 #import <AVFoundation/AVFoundation.h>
 #import <VideoToolbox/VideoToolbox.h>
 
 /**
  Utility class for reversing videos
  */
-@interface ILABReverseVideoExportSession : NSObject
+@interface ORCILABReverseVideoExportSession : NSObject
 
 @property (readonly) BOOL sourceReady;                              /**< Source is loaded and ready to be reversed */
 @property (readonly) NSInteger sourceVideoTracks;                   /**< Number of video tracks on source asset, anything beyond the 1st will be ignored/skipped */
@@ -25,7 +25,7 @@
 @property (readonly) CGAffineTransform sourceTransform;             /**< Source transform */
 @property (readonly) CGSize sourceSize;                             /**< Natural size of the source asset */
 @property (readonly) NSInteger videoTrackIndex;                     /**< 0-based index into the source's video tracks to use, default 0 */
-@property (readonly) NSInteger audioTrackIndex;                     /**< 0-based audio track to reverse, default 0; ILABAudioTrackIndexAll is treated as 0 */
+@property (readonly) NSInteger audioTrackIndex;                     /**< 0-based audio track to reverse, default 0; ORCILABAudioTrackIndexAll is treated as 0 */
 
 @property (assign, nonatomic) BOOL showDebug;                       /**< Show debug output messages when reversing */
 @property (assign, nonatomic) NSInteger samplesPerPass;             /**< Samples per pass when reversing video */
@@ -52,7 +52,7 @@
 
 /**
  Create a new instance that reverses the given video and audio streams (0-based, per media type) instead of the first ones.
- ILABAudioTrackIndexAll is treated as audio stream 0 (reverse never mixed). An out-of-range index fails the export with ILABSessionErrorInvalidTrackIndex.
+ ORCILABAudioTrackIndexAll is treated as audio stream 0 (reverse never mixed). An out-of-range index fails the export with ORCILABSessionErrorInvalidTrackIndex.
  */
 -(instancetype)initWithAsset:(AVAsset *)sourceAsset timeRange:(CMTimeRange)timeRange videoTrackIndex:(NSInteger)videoTrackIndex audioTrackIndex:(NSInteger)audioTrackIndex;
 
@@ -94,7 +94,7 @@
  @param progressBlock Block to call to report progress of export
  @param completeBlock Block to call when export has completed
  */
--(void)exportAsynchronously:(ILABProgressBlock)progressBlock complete:(ILABCompleteBlock)completeBlock;
+-(void)exportAsynchronously:(ORCILABProgressBlock)progressBlock complete:(ORCILABCompleteBlock)completeBlock;
 
 /**
  Cancel the reverse export process

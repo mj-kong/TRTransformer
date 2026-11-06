@@ -9,9 +9,9 @@
  * PURPOSE.
  ******************************************************************************/
 
-#import "TRTransformAPI.h"
+#import "ORCTRTransformAPI.h"
 
-BOOL isProResType(AVAssetTrack * track) {
+BOOL orc_isProResType(AVAssetTrack * track) {
     for (id formatDescription in track.formatDescriptions) {
         CMFormatDescriptionRef desc = (__bridge CMFormatDescriptionRef)formatDescription;
         FourCharCode codecType = CMFormatDescriptionGetMediaSubType(desc);
@@ -33,7 +33,7 @@ BOOL isProResType(AVAssetTrack * track) {
     return NO;
 }
 
-BOOL isProResCodec(CMVideoCodecType codecType) {
+BOOL orc_isProResCodec(CMVideoCodecType codecType) {
     switch (codecType) {
         case kCMVideoCodecType_AppleProRes4444XQ:
         case kCMVideoCodecType_AppleProRes4444:
@@ -49,7 +49,7 @@ BOOL isProResCodec(CMVideoCodecType codecType) {
     }
 }
 
-BOOL isDolbyVisionType(AVAssetTrack *track) {
+BOOL orc_isDolbyVisionType(AVAssetTrack *track) {
     for (id formatDescription in track.formatDescriptions) {
         CMFormatDescriptionRef desc = (__bridge CMFormatDescriptionRef)formatDescription;
         CFDictionaryRef extensions = CMFormatDescriptionGetExtensions(desc);
@@ -73,7 +73,7 @@ BOOL isDolbyVisionType(AVAssetTrack *track) {
     return NO;
 }
 
-BOOL isHEVCCodec(CMVideoCodecType codecType) {
+BOOL orc_isHEVCCodec(CMVideoCodecType codecType) {
     switch (codecType) {
         case kCMVideoCodecType_HEVC:
         case kCMVideoCodecType_HEVCWithAlpha:
@@ -83,7 +83,7 @@ BOOL isHEVCCodec(CMVideoCodecType codecType) {
     }
 }
 
-BOOL isDolbyVisionCodec(CMVideoCodecType codecType) {
+BOOL orc_isDolbyVisionCodec(CMVideoCodecType codecType) {
     switch (codecType) {
         case kCMVideoCodecType_DolbyVisionHEVC:
             return YES;
@@ -92,7 +92,7 @@ BOOL isDolbyVisionCodec(CMVideoCodecType codecType) {
     }
 }
 
-NSDictionary * makeCompressionProperties(CGSize size, CGFloat estimatedDataRate, CMVideoCodecType sourceCodecType, BOOL isHDRFormat, BOOL isDolbyFormat) {
+NSDictionary * orc_makeCompressionProperties(CGSize size, CGFloat estimatedDataRate, CMVideoCodecType sourceCodecType, BOOL isHDRFormat, BOOL isDolbyFormat) {
     static const NSInteger fullHDProportion = 1920 * 1080;
     
     NSMutableDictionary *settings = [NSMutableDictionary dictionary];
@@ -110,7 +110,7 @@ NSDictionary * makeCompressionProperties(CGSize size, CGFloat estimatedDataRate,
     if (isDolbyFormat) {
         [settings setObject:(__bridge NSString*)kVTProfileLevel_HEVC_Main10_AutoLevel
                      forKey:AVVideoProfileLevelKey];
-    } else if (isProResCodec(sourceCodecType) || isHEVCCodec(sourceCodecType)) {
+    } else if (orc_isProResCodec(sourceCodecType) || orc_isHEVCCodec(sourceCodecType)) {
         [settings setObject:(__bridge NSString*)kVTProfileLevel_HEVC_Main_AutoLevel
                      forKey:AVVideoProfileLevelKey];
     } else {
@@ -127,7 +127,7 @@ NSDictionary * makeCompressionProperties(CGSize size, CGFloat estimatedDataRate,
     return settings;
 }
 
-NSDictionary * makeVideoReaderSettings(BOOL containsHDRVideo, BOOL containsAlphaChannel, BOOL isProResType) {
+NSDictionary * orc_makeVideoReaderSettings(BOOL containsHDRVideo, BOOL containsAlphaChannel, BOOL orc_isProResType) {
     NSMutableDictionary *settings = [NSMutableDictionary dictionary];
     if (containsHDRVideo) {
         [settings setObject:@(kCVPixelFormatType_420YpCbCr10BiPlanarVideoRange)
@@ -135,7 +135,7 @@ NSDictionary * makeVideoReaderSettings(BOOL containsHDRVideo, BOOL containsAlpha
     } else if (containsAlphaChannel) {
         [settings setObject:@(kCVPixelFormatType_32ARGB)
                      forKey:(NSString *)kCVPixelBufferPixelFormatTypeKey];
-    } else if (isProResType) {
+    } else if (orc_isProResType) {
         [settings setObject:@(kCVPixelFormatType_4444AYpCbCr16)
                      forKey:(NSString *)kCVPixelBufferPixelFormatTypeKey];
     } else {
@@ -145,7 +145,7 @@ NSDictionary * makeVideoReaderSettings(BOOL containsHDRVideo, BOOL containsAlpha
     return settings;
 }
 
-NSDictionary * makeVideoDefaultSettings(CGSize size, NSDictionary * compressionProperties) {
+NSDictionary * orc_makeVideoDefaultSettings(CGSize size, NSDictionary * compressionProperties) {
     NSMutableDictionary *settings = [NSMutableDictionary dictionary];
 
     [settings setObject:@(size.width)
@@ -160,7 +160,7 @@ NSDictionary * makeVideoDefaultSettings(CGSize size, NSDictionary * compressionP
     return settings;
 }
 
-AVVideoCodecType convertToCodecType(CMVideoCodecType codecType, BOOL containsAlphaChannel) {
+AVVideoCodecType orc_convertToCodecType(CMVideoCodecType codecType, BOOL containsAlphaChannel) {
     switch (codecType) {
         case kCMVideoCodecType_AppleProRes4444XQ:
         case kCMVideoCodecType_HEVCWithAlpha:
@@ -180,14 +180,14 @@ AVVideoCodecType convertToCodecType(CMVideoCodecType codecType, BOOL containsAlp
     }
 }
 
-NSDictionary * makeVideoOutputSettings(CGSize size, CMVideoCodecType sourceCodecType, BOOL containsHDRVideo, BOOL containsAlphaChannel, NSDictionary * compressionProperties) {
+NSDictionary * orc_makeVideoOutputSettings(CGSize size, CMVideoCodecType sourceCodecType, BOOL containsHDRVideo, BOOL containsAlphaChannel, NSDictionary * compressionProperties) {
     NSMutableDictionary *settings = [NSMutableDictionary dictionary];
     
     [settings setObject:@(size.width)
                  forKey:AVVideoWidthKey];
     [settings setObject:@(size.height)
                  forKey:AVVideoHeightKey];
-    [settings setObject: convertToCodecType(sourceCodecType, containsAlphaChannel)
+    [settings setObject: orc_convertToCodecType(sourceCodecType, containsAlphaChannel)
                  forKey:AVVideoCodecKey];
     [settings setObject:compressionProperties
                  forKey:AVVideoCompressionPropertiesKey];
@@ -203,7 +203,7 @@ NSDictionary * makeVideoOutputSettings(CGSize size, CMVideoCodecType sourceCodec
     return settings;
 }
 
-NSDictionary * makeDefaultCompressionProperties(CGSize size, CGFloat estimatedDataRate) {
+NSDictionary * orc_makeDefaultCompressionProperties(CGSize size, CGFloat estimatedDataRate) {
     static const NSInteger fullHDProportion = 1920 * 1080;
     
     NSMutableDictionary *settings = [NSMutableDictionary dictionary];

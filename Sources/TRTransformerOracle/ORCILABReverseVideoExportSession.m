@@ -1,16 +1,16 @@
 //
-//  ILABReverseVideoExporter.m
+//  ORCILABReverseVideoExporter.m
 //
 //  Created by Jon Gilkison on 8/15/17.
 //  Copyright © 2017 Jon Gilkison. All rights reserved.
 //  Copyright © 2017 chrissung. All rights reserved.
 //
 
-#import "ILABReverseVideoExportSession.h"
-#import "ILABAudioTrackExporter.h"
-#import "TRTransformAPI.h"
+#import "ORCILABReverseVideoExportSession.h"
+#import "ORCILABAudioTrackExporter.h"
+#import "ORCTRTransformAPI.h"
 
-@interface ILABReverseVideoExportSession()
+@interface ORCILABReverseVideoExportSession()
 @property (nonatomic) BOOL sourceReady;
 @property (nonatomic) NSInteger sourceVideoTracks;
 @property (nonatomic) NSInteger sourceAudioTracks;
@@ -28,25 +28,25 @@
 @property (nonatomic, strong) AVAsset * reversingVideoAsset;
 @property (nonatomic, strong) AVAsset * reversedAudioAsset;
 @property (nonatomic, strong) AVAssetExportSession * exportSession;
-@property (nonatomic, strong) ILABAudioTrackExporter * audioExporter;
+@property (nonatomic, strong) ORCILABAudioTrackExporter * audioExporter;
 
 @property (nonatomic) BOOL containsHDRVideo;
-@property (nonatomic) BOOL isProResType;
-@property (nonatomic) BOOL isDolbyVisionType;
+@property (nonatomic) BOOL orc_isProResType;
+@property (nonatomic) BOOL orc_isDolbyVisionType;
 @property (nonatomic) BOOL containsAlphaChannel;
 @property (nonatomic) CMVideoCodecType sourceCodecType;
 @property (nonatomic) NSInteger videoTrackIndex;
 @property (nonatomic) NSInteger audioTrackIndex;
 @end
 
-typedef void(^ILABGenerateAssetBlock)(BOOL isSuccess, AVAsset *asset, NSError *error);
+typedef void(^ORCILABGenerateAssetBlock)(BOOL isSuccess, AVAsset *asset, NSError *error);
 
 // nil when out of range, so an invalid index never throws or falls back to another stream.
-static AVAssetTrack *ILABTrackAtIndex(NSArray<AVAssetTrack *> *tracks, NSInteger index) {
+static AVAssetTrack *ORCILABTrackAtIndex(NSArray<AVAssetTrack *> *tracks, NSInteger index) {
     return (index >= 0 && index < (NSInteger)tracks.count) ? tracks[index] : nil;
 }
 
-@implementation ILABReverseVideoExportSession
+@implementation ORCILABReverseVideoExportSession
 
 #pragma mark - Init/Dealloc
 
@@ -88,7 +88,7 @@ static AVAssetTrack *ILABTrackAtIndex(NSArray<AVAssetTrack *> *tracks, NSInteger
         self.showDebug = NO;
         self.samplesPerPass = 40;
 
-        AVAssetTrack *track = ILABTrackAtIndex([sourceAsset tracksWithMediaType:AVMediaTypeVideo], videoTrackIndex);
+        AVAssetTrack *track = ORCILABTrackAtIndex([sourceAsset tracksWithMediaType:AVMediaTypeVideo], videoTrackIndex);
         AVMutableComposition *videoComposition = [AVMutableComposition composition];
         AVMutableCompositionTrack *vTrack = [videoComposition
                                              addMutableTrackWithMediaType:AVMediaTypeVideo
@@ -104,8 +104,8 @@ static AVAssetTrack *ILABTrackAtIndex(NSArray<AVAssetTrack *> *tracks, NSInteger
             [track hasMediaCharacteristic:AVMediaCharacteristicContainsHDRVideo]) {
             self.containsHDRVideo = YES;
         }
-        self.isProResType = isProResType(track);
-        self.isDolbyVisionType = isDolbyVisionType(track);
+        self.orc_isProResType = orc_isProResType(track);
+        self.orc_isDolbyVisionType = orc_isDolbyVisionType(track);
         CMFormatDescriptionRef ref = (__bridge CMFormatDescriptionRef)([track.formatDescriptions firstObject]);
         if (ref) {
             self.sourceCodecType = CMFormatDescriptionGetMediaSubType(ref);
@@ -116,19 +116,19 @@ static AVAssetTrack *ILABTrackAtIndex(NSArray<AVAssetTrack *> *tracks, NSInteger
 }
 
 +(instancetype)exportSessionWithURL:(NSURL *)sourceVideoURL outputURL:(NSURL *)outputURL {
-    ILABReverseVideoExportSession *session = [[[self class] alloc] initWithURL:sourceVideoURL];
+    ORCILABReverseVideoExportSession *session = [[[self class] alloc] initWithURL:sourceVideoURL];
     session.outputURL = outputURL;
     return session;
 }
 
 +(instancetype)exportSessionWithAsset:(AVAsset *)sourceAsset timeRange:(CMTimeRange)timeRange outputURL:(NSURL *)outputURL {
-    ILABReverseVideoExportSession *session = [[[self class] alloc] initWithAsset:sourceAsset timeRange:timeRange];
+    ORCILABReverseVideoExportSession *session = [[[self class] alloc] initWithAsset:sourceAsset timeRange:timeRange];
     session.outputURL = outputURL;
     return session;
 }
 
 +(instancetype)exportSessionWithAsset:(AVAsset *)sourceAsset timeRange:(CMTimeRange)timeRange videoTrackIndex:(NSInteger)videoTrackIndex audioTrackIndex:(NSInteger)audioTrackIndex outputURL:(NSURL *)outputURL {
-    ILABReverseVideoExportSession *session = [[[self class] alloc] initWithAsset:sourceAsset timeRange:timeRange videoTrackIndex:videoTrackIndex audioTrackIndex:audioTrackIndex];
+    ORCILABReverseVideoExportSession *session = [[[self class] alloc] initWithAsset:sourceAsset timeRange:timeRange videoTrackIndex:videoTrackIndex audioTrackIndex:audioTrackIndex];
     session.outputURL = outputURL;
     return session;
 }
@@ -148,7 +148,7 @@ static AVAssetTrack *ILABTrackAtIndex(NSArray<AVAssetTrack *> *tracks, NSInteger
         
         NSArray<AVAssetTrack *> *videos = [weakSelf.sourceAsset tracksWithMediaType:AVMediaTypeVideo];
         NSArray<AVAssetTrack *> *audios = [weakSelf.sourceAsset tracksWithMediaType:AVMediaTypeAudio];
-        AVAssetTrack *video = ILABTrackAtIndex(videos, weakSelf.videoTrackIndex);
+        AVAssetTrack *video = ORCILABTrackAtIndex(videos, weakSelf.videoTrackIndex);
         
         weakSelf.sourceDuration = weakSelf.sourceAsset.duration;
         weakSelf.sourceVideoTracks = videos.count;
@@ -217,15 +217,15 @@ static AVAssetTrack *ILABTrackAtIndex(NSArray<AVAssetTrack *> *tracks, NSInteger
 // Video index 0 and sources without audio keep the legacy paths (no video track / no-audio output).
 -(BOOL)hasValidTrackIndexes {
     BOOL videoValid = self.videoTrackIndex == 0 || (self.videoTrackIndex > 0 && self.videoTrackIndex < self.sourceVideoTracks);
-    BOOL audioValid = self.sourceAudioTracks == 0 || self.audioTrackIndex == ILABAudioTrackIndexAll || (self.audioTrackIndex >= 0 && self.audioTrackIndex < self.sourceAudioTracks);
+    BOOL audioValid = self.sourceAudioTracks == 0 || self.audioTrackIndex == ORCILABAudioTrackIndexAll || (self.audioTrackIndex >= 0 && self.audioTrackIndex < self.sourceAudioTracks);
     return videoValid && audioValid;
 }
 
--(void)exportAsynchronously:(ILABProgressBlock)progressBlock complete:(ILABCompleteBlock)completeBlock {
+-(void)exportAsynchronously:(ORCILABProgressBlock)progressBlock complete:(ORCILABCompleteBlock)completeBlock {
     // Make sure the output URL has been specified
     if (!self.outputURL) {
         if (completeBlock) {
-            completeBlock(NO, [NSError ILABSessionError:ILABSessionErrorMissingOutputURL]);
+            completeBlock(NO, [NSError ORCILABSessionError:ORCILABSessionErrorMissingOutputURL]);
         }
         return;
     }
@@ -243,17 +243,17 @@ static AVAssetTrack *ILABTrackAtIndex(NSArray<AVAssetTrack *> *tracks, NSInteger
     }
     if (![self hasValidTrackIndexes]) {
         if (completeBlock) {
-            completeBlock(NO, [NSError ILABSessionError:ILABSessionErrorInvalidTrackIndex]);
+            completeBlock(NO, [NSError ORCILABSessionError:ORCILABSessionErrorInvalidTrackIndex]);
         }
         return;
     }
     if (self.showDebug) {
-        NSLog(@"reverse containsHDRVideo: %d, isProResType: %d", self.containsHDRVideo, self.isProResType);
+        NSLog(@"reverse containsHDRVideo: %d, orc_isProResType: %d", self.containsHDRVideo, self.orc_isProResType);
     }
     [self doReverse:progressBlock complete:completeBlock];
 }
 
--(void)doReverse:(ILABProgressBlock)progressBlock complete:(ILABCompleteBlock)completeBlock {
+-(void)doReverse:(ORCILABProgressBlock)progressBlock complete:(ORCILABCompleteBlock)completeBlock {
     NSString *cachePath = NSSearchPathForDirectoriesInDomains(NSCachesDirectory, NSUserDomainMask, YES).firstObject;
     
     NSURL *audioDestionationURL = [NSURL fileURLWithPath:[cachePath stringByAppendingFormat:@"/%@-tempAudio.m4a",[[NSUUID UUID] UUIDString]]];
@@ -294,7 +294,7 @@ static AVAssetTrack *ILABTrackAtIndex(NSArray<AVAssetTrack *> *tracks, NSInteger
 
 #pragma mark - Reverse Methods
 
--(void)updateProgressBlock:(ILABProgressBlock)progressBlock operation:(NSString *)operation progress:(float)progress {
+-(void)updateProgressBlock:(ORCILABProgressBlock)progressBlock operation:(NSString *)operation progress:(float)progress {
     if (!progressBlock) {
         return;
     }
@@ -304,7 +304,7 @@ static AVAssetTrack *ILABTrackAtIndex(NSArray<AVAssetTrack *> *tracks, NSInteger
     });
 }
 
--(void)exportAtDestinationURL:(NSURL *)destinationURL videoAsset:(AVAsset *)videoAsset audioAsset:(AVAsset *)audioAsset progressBlock:(ILABProgressBlock)progressBlock complete:(ILABCompleteBlock)completeBlock {
+-(void)exportAtDestinationURL:(NSURL *)destinationURL videoAsset:(AVAsset *)videoAsset audioAsset:(AVAsset *)audioAsset progressBlock:(ORCILABProgressBlock)progressBlock complete:(ORCILABCompleteBlock)completeBlock {
     
     AVAssetTrack *videoTrack = [videoAsset tracksWithMediaType:AVMediaTypeVideo].firstObject;
     AVAssetTrack *audioTrack = [audioAsset tracksWithMediaType:AVMediaTypeAudio].firstObject;
@@ -333,7 +333,7 @@ static AVAssetTrack *ILABTrackAtIndex(NSArray<AVAssetTrack *> *tracks, NSInteger
     }
 
     if (error != nil) {
-        completeBlock(NO, [NSError ILABSessionError:ILABSessionErrorInsertTrack]);
+        completeBlock(NO, [NSError ORCILABSessionError:ORCILABSessionErrorInsertTrack]);
         return;
     }
 
@@ -368,7 +368,7 @@ static AVAssetTrack *ILABTrackAtIndex(NSArray<AVAssetTrack *> *tracks, NSInteger
             weakSelf.exportSession = [AVAssetExportSession exportSessionWithAsset:muxComp
                                                                        presetName:preset];
             if (weakSelf.exportSession == nil) {
-                completeBlock(NO, [NSError ILABSessionError:ILABSessionErrorAVAssetExportSessionCreate]);
+                completeBlock(NO, [NSError ORCILABSessionError:ORCILABSessionErrorAVAssetExportSessionCreate]);
                 return;
             }
             weakSelf.exportSession.outputFileType = outputType;
@@ -376,7 +376,7 @@ static AVAssetTrack *ILABTrackAtIndex(NSArray<AVAssetTrack *> *tracks, NSInteger
 
             [weakSelf.exportSession exportAsynchronouslyWithCompletionHandler:^{
                 if (weakSelf.isCanceled) {
-                    weakSelf.lastError = [NSError ILABSessionError:ILABSessionErrorUserCancel];
+                    weakSelf.lastError = [NSError ORCILABSessionError:ORCILABSessionErrorUserCancel];
                 } else if (weakSelf.exportSession.status != AVAssetExportSessionStatusCompleted) {
                     weakSelf.lastError = weakSelf.exportSession.error;
                 }
@@ -385,16 +385,16 @@ static AVAssetTrack *ILABTrackAtIndex(NSArray<AVAssetTrack *> *tracks, NSInteger
                 }
             }];
         } else {
-            completeBlock(NO, [NSError ILABSessionError:ILABSessionErrorAVAssetExportSessionCompatibility]);
+            completeBlock(NO, [NSError ORCILABSessionError:ORCILABSessionErrorAVAssetExportSessionCompatibility]);
         }
     }];
 }
 
--(void)reversingAudioAtDestinationURL:(NSURL *)destinationURL completBlock:(ILABGenerateAssetBlock)resultsBlock {
+-(void)reversingAudioAtDestinationURL:(NSURL *)destinationURL completBlock:(ORCILABGenerateAssetBlock)resultsBlock {
     __weak typeof(self) weakSelf = self;
     
-    self.audioExporter = [[ILABAudioTrackExporter alloc] initWithAsset:self.sourceAsset
-                                                           trackIndex:(self.audioTrackIndex == ILABAudioTrackIndexAll ? 0 : self.audioTrackIndex)
+    self.audioExporter = [[ORCILABAudioTrackExporter alloc] initWithAsset:self.sourceAsset
+                                                           trackIndex:(self.audioTrackIndex == ORCILABAudioTrackIndexAll ? 0 : self.audioTrackIndex)
                                                             timeRange:self.timeRange];
 
     dispatch_async([[self class] reverseGenerateQueue], ^{
@@ -415,9 +415,9 @@ static AVAssetTrack *ILABTrackAtIndex(NSArray<AVAssetTrack *> *tracks, NSInteger
     });
 }
 
--(void)convertToM4ATypeAtDestinationURL:(NSURL *)destinationURL asset:(AVAsset *)asset completeBlcok:(ILABCompleteBlock)completeBlock {
+-(void)convertToM4ATypeAtDestinationURL:(NSURL *)destinationURL asset:(AVAsset *)asset completeBlcok:(ORCILABCompleteBlock)completeBlock {
     // asset is the single-track reversed WAV; All keeps the previous whole-composition M4A export.
-    self.audioExporter = [[ILABAudioTrackExporter alloc] initWithAsset:asset trackIndex:ILABAudioTrackIndexAll];
+    self.audioExporter = [[ORCILABAudioTrackExporter alloc] initWithAsset:asset trackIndex:ORCILABAudioTrackIndexAll];
     
     __weak typeof(self) weakSelf = self;
    [self.audioExporter exportInM4ATo:destinationURL
@@ -428,7 +428,7 @@ static AVAssetTrack *ILABTrackAtIndex(NSArray<AVAssetTrack *> *tracks, NSInteger
     }];
 }
 
--(void)reverseAudioDestinationURL:(NSURL *)destinationURL completeBlock:(ILABCompleteBlock)completeBlock {
+-(void)reverseAudioDestinationURL:(NSURL *)destinationURL completeBlock:(ORCILABCompleteBlock)completeBlock {
     if (self.sourceAudioTracks== 0) {
         completeBlock(YES, nil);
         return;
@@ -466,7 +466,7 @@ static AVAssetTrack *ILABTrackAtIndex(NSArray<AVAssetTrack *> *tracks, NSInteger
     }];
 }
 
--(void)reverseVideoAtDestinationURL:(NSURL *)destinationURL progress:(ILABProgressBlock)progressBlock completeBlock:(ILABGenerateAssetBlock)resultsBlock {
+-(void)reverseVideoAtDestinationURL:(NSURL *)destinationURL progress:(ORCILABProgressBlock)progressBlock completeBlock:(ORCILABGenerateAssetBlock)resultsBlock {
     __weak typeof(self) weakSelf = self;
     dispatch_async([[self class] reverseGenerateQueue], ^{
         
@@ -481,7 +481,7 @@ static AVAssetTrack *ILABTrackAtIndex(NSArray<AVAssetTrack *> *tracks, NSInteger
             return;
         }
         
-        NSDictionary *outputSettings = makeVideoReaderSettings(self.containsHDRVideo, self.containsAlphaChannel, self.isProResType);
+        NSDictionary *outputSettings = orc_makeVideoReaderSettings(self.containsHDRVideo, self.containsAlphaChannel, self.orc_isProResType);
         AVAssetReaderTrackOutput *assetReaderOutput = [AVAssetReaderTrackOutput
                                                        assetReaderTrackOutputWithTrack:[weakSelf.reversingVideoAsset tracksWithMediaType:AVMediaTypeVideo].firstObject
                                                        outputSettings:outputSettings];
@@ -489,7 +489,7 @@ static AVAssetTrack *ILABTrackAtIndex(NSArray<AVAssetTrack *> *tracks, NSInteger
         [assetReader addOutput:assetReaderOutput];
         
         if (![assetReader startReading]) {
-            weakSelf.lastError = [NSError ILABSessionError:ILABSessionErrorAVAssetReaderStartReading];
+            weakSelf.lastError = [NSError ORCILABSessionError:ORCILABSessionErrorAVAssetReaderStartReading];
             resultsBlock(NO, nil, weakSelf.lastError);
             return;
         }
@@ -515,7 +515,7 @@ static AVAssetTrack *ILABTrackAtIndex(NSArray<AVAssetTrack *> *tracks, NSInteger
             [revSampleTimes addObject:[NSValue valueWithCMTime:presentationTime]];
             
             if ([weakSelf isCanceledReverseExport]) {
-                weakSelf.lastError = [NSError ILABSessionError:ILABSessionErrorUserCancel];
+                weakSelf.lastError = [NSError ORCILABSessionError:ORCILABSessionErrorUserCancel];
                 resultsBlock(NO, nil, weakSelf.lastError);
                 CFRelease(sample); sample = NULL;
                 return;
@@ -533,14 +533,14 @@ static AVAssetTrack *ILABTrackAtIndex(NSArray<AVAssetTrack *> *tracks, NSInteger
             if (weakSelf.showDebug) {
                 NSLog(@"%@", assetReader.error.localizedDescription);
             }
-            weakSelf.lastError = [NSError ILABSessionError:ILABSessionErrorAVAssetReaderReading];
+            weakSelf.lastError = [NSError ORCILABSessionError:ORCILABSessionErrorAVAssetReaderReading];
             resultsBlock(NO, nil, weakSelf.lastError);
             return;
         }
 
         // No samples, no bueno
         if (revSampleTimes.count == 0) {
-            weakSelf.lastError = [NSError ILABSessionError:ILABSessionErrorVideoNoSamples];
+            weakSelf.lastError = [NSError ORCILABSessionError:ORCILABSessionErrorVideoNoSamples];
             resultsBlock(NO, nil, weakSelf.lastError);
             return;
         }
@@ -611,22 +611,22 @@ static AVAssetTrack *ILABTrackAtIndex(NSArray<AVAssetTrack *> *tracks, NSInteger
         BOOL firstTry = YES;
 
         do {
-            NSDictionary *compressionProperties = makeCompressionProperties(
+            NSDictionary *compressionProperties = orc_makeCompressionProperties(
                 self.sourceSize,
                 self.sourceEstimatedDataRate,
                 self.sourceCodecType,
                 self.containsHDRVideo,
-                self.isDolbyVisionType
+                self.orc_isDolbyVisionType
             );
-            NSDictionary *outputSettings = makeVideoOutputSettings(
+            NSDictionary *outputSettings = orc_makeVideoOutputSettings(
                 self.sourceSize,
                 self.sourceCodecType,
                 self.containsHDRVideo,
                 self.containsAlphaChannel,
                 compressionProperties
             );
-            NSDictionary *defaultCompressionProperties = makeDefaultCompressionProperties(self.sourceSize, self.sourceEstimatedDataRate);
-            NSDictionary *defaultSettings = makeVideoDefaultSettings(self.sourceSize, defaultCompressionProperties);
+            NSDictionary *defaultCompressionProperties = orc_makeDefaultCompressionProperties(self.sourceSize, self.sourceEstimatedDataRate);
+            NSDictionary *defaultSettings = orc_makeVideoDefaultSettings(self.sourceSize, defaultCompressionProperties);
             assetWriter = [AVAssetWriter assetWriterWithURL:destinationURL
                                                    fileType:AVFileTypeQuickTimeMovie
                                                       error:&error];
@@ -688,7 +688,7 @@ static AVAssetTrack *ILABTrackAtIndex(NSArray<AVAssetTrack *> *tracks, NSInteger
                 if (weakSelf.showDebug) {
                     NSLog(@"%@", assetReader.error.localizedDescription);
                 }
-                weakSelf.lastError = [NSError ILABSessionError:ILABSessionErrorAVAssetReaderReading];
+                weakSelf.lastError = [NSError ORCILABSessionError:ORCILABSessionErrorAVAssetReaderReading];
                 resultsBlock(NO, nil, weakSelf.lastError);
                 return;
             }
@@ -712,7 +712,7 @@ static AVAssetTrack *ILABTrackAtIndex(NSArray<AVAssetTrack *> *tracks, NSInteger
                     }
                     didAppend = [adaptor appendPixelBuffer:imageBufferRef withPresentationTime:eventTime];
                     if (!didAppend) {
-                        weakSelf.lastError = [NSError ILABSessionError:ILABSessionErrorVideoUnableToWirteFrame];
+                        weakSelf.lastError = [NSError ORCILABSessionError:ORCILABSessionErrorVideoUnableToWirteFrame];
                         resultsBlock(NO, nil, weakSelf.lastError);
                         return;
                     }
@@ -725,7 +725,7 @@ static AVAssetTrack *ILABTrackAtIndex(NSArray<AVAssetTrack *> *tracks, NSInteger
                 frameCount++;
                 
                 if ([weakSelf isCanceledReverseExport]) {
-                    weakSelf.lastError = [NSError ILABSessionError:ILABSessionErrorUserCancel];
+                    weakSelf.lastError = [NSError ORCILABSessionError:ORCILABSessionErrorUserCancel];
                     resultsBlock(NO, nil, weakSelf.lastError);
                     samples = nil;
                     return;
@@ -743,7 +743,7 @@ static AVAssetTrack *ILABTrackAtIndex(NSArray<AVAssetTrack *> *tracks, NSInteger
         [assetWriterInput markAsFinished];
         
         if ([self isCanceledReverseExport]) {
-            weakSelf.lastError = [NSError ILABSessionError:ILABSessionErrorUserCancel];
+            weakSelf.lastError = [NSError ORCILABSessionError:ORCILABSessionErrorUserCancel];
             resultsBlock(NO, nil, weakSelf.lastError);
             return;
         }

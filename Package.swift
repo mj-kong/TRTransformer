@@ -23,12 +23,19 @@ let package = Package(
         // Targets can depend on other targets in this package, and on products in packages this package depends on.
         .target(
             name: "TRTransformer",
+            dependencies: []),
+        // Test-only reference copy of the ObjC implementation (renamed, see Sources/TRTransformerOracle/ORACLE.md).
+        // Not in `products`: only the test target links it, for differential tests against the shipping target.
+        .target(
+            name: "TRTransformerOracle",
             dependencies: [],
+            exclude: ["ORACLE.md"],
             cSettings: [
-                .headerSearchPath("Sources/TRTransformer/include")
+                .headerSearchPath("Sources/TRTransformerOracle/include")
             ]),
         .testTarget(
             name: "TRTransformerTests",
-            dependencies: ["TRTransformer"]),
-    ]
+            dependencies: ["TRTransformer", "TRTransformerOracle"]),
+    ],
+    swiftLanguageVersions: [.v5]
 )

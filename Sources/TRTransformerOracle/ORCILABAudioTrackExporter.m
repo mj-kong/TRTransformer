@@ -1,21 +1,21 @@
 //
-//  ILABAudioTrackExporter.m
-//  ILABReverseVideoExporter
+//  ORCILABAudioTrackExporter.m
+//  ORCILABReverseVideoExporter
 //
 //  Created by Jon Gilkison on 8/15/17.
 //
 
-#import "ILABAudioTrackExporter.h"
+#import "ORCILABAudioTrackExporter.h"
 @import Accelerate;
 
-#pragma mark - AVAssetTrack (Settings)
-@interface AVAssetTrack (Settings)
--(NSDictionary *)decompressionAudioSettingForPCMType;
--(NSDictionary *)compressionAudioSettingForPCMType;
+#pragma mark - AVAssetTrack (ORCSettings)
+@interface AVAssetTrack (ORCSettings)
+-(NSDictionary *)orc_decompressionAudioSettingForPCMType;
+-(NSDictionary *)orc_compressionAudioSettingForPCMType;
 @end
 
-@implementation AVAssetTrack (Settings)
--(AudioChannelLayoutTag)getLayerTagWithChannelPerFrame:(UInt32)channelPerFrame {
+@implementation AVAssetTrack (ORCSettings)
+-(AudioChannelLayoutTag)orc_getLayerTagWithChannelPerFrame:(UInt32)channelPerFrame {
     if (channelPerFrame == 1) { return kAudioChannelLayoutTag_MPEG_1_0; }
     else if (channelPerFrame == 2) { return kAudioChannelLayoutTag_MPEG_2_0; }
     else if (channelPerFrame == 3) { return kAudioChannelLayoutTag_MPEG_3_0_A; }
@@ -26,12 +26,12 @@
     else if (channelPerFrame == 8) { return kAudioChannelLayoutTag_MPEG_7_1_A; }
 }
                                     
--(NSDictionary *)decompressionAudioSettingForPCMType {
+-(NSDictionary *)orc_decompressionAudioSettingForPCMType {
     CMAudioFormatDescriptionRef descriptionRef = (__bridge CMAudioFormatDescriptionRef)(self.formatDescriptions[0]);
     const AudioStreamBasicDescription *description = CMAudioFormatDescriptionGetStreamBasicDescription(descriptionRef);
 
     AudioChannelLayout stereoChannelLayout = {
-        .mChannelLayoutTag = [self getLayerTagWithChannelPerFrame:description->mChannelsPerFrame],
+        .mChannelLayoutTag = [self orc_getLayerTagWithChannelPerFrame:description->mChannelsPerFrame],
     };
     NSMutableDictionary *settings = [@{
         AVFormatIDKey:@(kAudioFormatLinearPCM),
@@ -48,12 +48,12 @@
     return settings;
 }
 
--(NSDictionary *)compressionAudioSettingForPCMType {
+-(NSDictionary *)orc_compressionAudioSettingForPCMType {
     CMAudioFormatDescriptionRef descriptionRef = (__bridge CMAudioFormatDescriptionRef)(self.formatDescriptions[0]);
     const AudioStreamBasicDescription *description = CMAudioFormatDescriptionGetStreamBasicDescription(descriptionRef);
 
     AudioChannelLayout stereoChannelLayout = {
-        .mChannelLayoutTag = [self getLayerTagWithChannelPerFrame:description->mChannelsPerFrame],
+        .mChannelLayoutTag = [self orc_getLayerTagWithChannelPerFrame:description->mChannelsPerFrame],
     };
     NSMutableDictionary *settings = [@{
         AVFormatIDKey:@(kAudioFormatLinearPCM),
@@ -71,8 +71,8 @@
 }
 @end
 
-#pragma mark - ILABAudioTrackExporter
-@interface ILABAudioTrackExporter ()
+#pragma mark - ORCILABAudioTrackExporter
+@interface ORCILABAudioTrackExporter ()
 @property (nonatomic, strong) AVAsset *exportingAudioAsset;
 @property (nonatomic, strong) NSError * lastError;
 
@@ -85,7 +85,7 @@
 @property (nonatomic) NSInteger trackIndex;
 @end
 
-@implementation ILABAudioTrackExporter
+@implementation ORCILABAudioTrackExporter
 #pragma mark - Init/Dealloc
 -(instancetype)initWithAsset:(AVAsset *)sourceAsset trackIndex:(NSInteger)trackIndex {
     return [self initWithAsset:sourceAsset
@@ -133,13 +133,13 @@
 
 
 #pragma mark - Audio Export Methods
-- (void)exportInM4ATo:(NSURL *)outputURL completion:(ILABCompleteBlock)completion {
+- (void)exportInM4ATo:(NSURL *)outputURL completion:(ORCILABCompleteBlock)completion {
     AVAsset *asset = self.exportingAudioAsset;
-    // ILABAudioTrackIndexAll exports the composition of every audio track (mixed); an index exports only that track.
-    if (self.trackIndex != ILABAudioTrackIndexAll) {
+    // ORCILABAudioTrackIndexAll exports the composition of every audio track (mixed); an index exports only that track.
+    if (self.trackIndex != ORCILABAudioTrackIndexAll) {
         NSArray<AVAssetTrack *> *tracks = [self.exportingAudioAsset tracksWithMediaType:AVMediaTypeAudio];
         if (self.trackIndex < 0 || self.trackIndex >= (NSInteger)tracks.count) {
-            completion(NO, [NSError ILABSessionError:ILABSessionErrorAudioInvalidTrackIndex]);
+            completion(NO, [NSError ORCILABSessionError:ORCILABSessionErrorAudioInvalidTrackIndex]);
             return;
         }
         AVAssetTrack *track = tracks[self.trackIndex];
@@ -164,7 +164,7 @@
     }];
 }
 
--(void)exportReverseToURL:(NSURL *)outputURL complete:(ILABCompleteBlock)completeBlock {
+-(void)exportReverseToURL:(NSURL *)outputURL complete:(ORCILABCompleteBlock)completeBlock {
     NSURL *tmpAudioFileURL = [[outputURL URLByDeletingLastPathComponent] URLByAppendingPathComponent:@"exported-audio.wav"];
 
     __weak typeof(self) weakSelf = self;
@@ -182,7 +182,7 @@
     }];
 }
 
--(void)exportingToURL:(NSURL *)destinationURL complete:(ILABCompleteBlock)completeBlock {
+-(void)exportingToURL:(NSURL *)destinationURL complete:(ORCILABCompleteBlock)completeBlock {
     [[NSFileManager defaultManager] removeItemAtURL:destinationURL error:nil];
     
     NSError *error = nil;
@@ -197,18 +197,18 @@
     }
     NSArray<AVAssetTrack *> *tracks = [self.exportingAudioAsset tracksWithMediaType:AVMediaTypeAudio];
     if (self.trackIndex < 0 || self.trackIndex >= (NSInteger)tracks.count) {
-        self.lastError = [NSError ILABSessionError:ILABSessionErrorAudioInvalidTrackIndex];
+        self.lastError = [NSError ORCILABSessionError:ORCILABSessionErrorAudioInvalidTrackIndex];
         completeBlock(NO, self.lastError);
         return;
     }
     AVAssetTrack *track = tracks[self.trackIndex];
 
     self.assetReaderOutput = [AVAssetReaderTrackOutput assetReaderTrackOutputWithTrack:track
-                                                                        outputSettings:[track decompressionAudioSettingForPCMType]];
+                                                                        outputSettings:[track orc_decompressionAudioSettingForPCMType]];
     [self.assetReader addOutput:self.assetReaderOutput];
     
     if (![self.assetReader startReading]) {
-        self.lastError = [NSError ILABSessionError:ILABSessionErrorAVAssetReaderStartReading];
+        self.lastError = [NSError ORCILABSessionError:ORCILABSessionErrorAVAssetReaderStartReading];
         completeBlock(NO, self.lastError);
         return;
     }
@@ -223,11 +223,11 @@
         return;
     }
     self.assetWriterInput = [AVAssetWriterInput assetWriterInputWithMediaType:AVMediaTypeAudio
-                                                               outputSettings:[track compressionAudioSettingForPCMType]];
+                                                               outputSettings:[track orc_compressionAudioSettingForPCMType]];
     [self.assetWriter addInput:self.assetWriterInput];
     
     if (![self.assetWriter startWriting]) {
-        self.lastError = [NSError ILABSessionError:ILABSessionErrorAVAssetWriterStartWriting];
+        self.lastError = [NSError ORCILABSessionError:ORCILABSessionErrorAVAssetWriterStartWriting];
         completeBlock(NO, self.lastError);
         return;
     }
@@ -238,7 +238,7 @@
         while ([self.assetWriterInput isReadyForMoreMediaData]) {
             CMSampleBufferRef nextSampleBuffer = [self.assetReaderOutput copyNextSampleBuffer];
             if (self.isCanceled) {
-                self.lastError = [NSError ILABSessionError:ILABSessionErrorUserCancel];
+                self.lastError = [NSError ORCILABSessionError:ORCILABSessionErrorUserCancel];
                 completeBlock(NO, self.lastError);
                 CFRelease(nextSampleBuffer); nextSampleBuffer = NULL;
                 return;
@@ -259,13 +259,13 @@
 
 -(void)exportingReverseToURL:(NSURL *)outputURL
              tmpAudioFileURL:(NSURL *)tmpAudioFileURL
-                    complete:(ILABCompleteBlock)completeBlock {
+                    complete:(ORCILABCompleteBlock)completeBlock {
     // set up input file
     AudioFileID inputAudioFile;
     OSStatus theErr = AudioFileOpenURL((__bridge CFURLRef)tmpAudioFileURL,
                                        kAudioFileReadPermission, 0, &inputAudioFile);
     if (theErr != noErr) {
-        self.lastError = [NSError errorWithAudioFileStatusCode:theErr];
+        self.lastError = [NSError orc_errorWithAudioFileStatusCode:theErr];
         if (completeBlock) {
             completeBlock(NO, self.lastError);
         }
@@ -277,7 +277,7 @@
     theErr = AudioFileGetProperty(inputAudioFile, kAudioFilePropertyDataFormat, &thePropertySize, &theFileFormat);
     if (theErr != noErr) {
         AudioFileClose(inputAudioFile);
-        self.lastError = [NSError errorWithAudioFileStatusCode:theErr];
+        self.lastError = [NSError orc_errorWithAudioFileStatusCode:theErr];
         if (completeBlock) {
             completeBlock(NO, self.lastError);
         }
@@ -289,7 +289,7 @@
     theErr = AudioFileGetProperty(inputAudioFile, kAudioFilePropertyAudioDataByteCount, &thePropertySize, &fileDataSize);
     if (theErr != noErr) {
         AudioFileClose(inputAudioFile);
-        self.lastError = [NSError errorWithAudioFileStatusCode:theErr];
+        self.lastError = [NSError orc_errorWithAudioFileStatusCode:theErr];
         if (completeBlock) {
             completeBlock(NO, self.lastError);
         }
@@ -304,7 +304,7 @@
                                     &outputAudioFile);
     if (theErr != noErr) {
         AudioFileClose(inputAudioFile);
-        self.lastError = [NSError errorWithAudioFileStatusCode:theErr];
+        self.lastError = [NSError orc_errorWithAudioFileStatusCode:theErr];
         if (completeBlock) {
             completeBlock(NO, self.lastError);
         }
@@ -328,7 +328,7 @@
     if (theErr != noErr) {
         AudioFileClose(inputAudioFile);
         AudioFileClose(outputAudioFile);
-        self.lastError = [NSError errorWithAudioFileStatusCode:theErr];
+        self.lastError = [NSError orc_errorWithAudioFileStatusCode:theErr];
         if (completeBlock) {
             completeBlock(NO, self.lastError);
         }
@@ -359,7 +359,7 @@
         
         AudioFileClose(inputAudioFile);
         AudioFileClose(outputAudioFile);
-        self.lastError = [NSError errorWithAudioFileStatusCode:theErr];
+        self.lastError = [NSError orc_errorWithAudioFileStatusCode:theErr];
         if (completeBlock) {
             completeBlock(NO, self.lastError);
         }
