@@ -34,9 +34,16 @@
 @property (nonatomic) BOOL isDolbyVisionType;
 @property (nonatomic) BOOL containsAlphaChannel;
 @property (nonatomic) CMVideoCodecType sourceCodecType;
+@property (nonatomic) NSInteger videoTrackIndex;
+@property (nonatomic) NSInteger audioTrackIndex;
 @end
 
 typedef void(^ILABGenerateAssetBlock)(BOOL isSuccess, AVAsset *asset, NSError *error);
+
+// nil when out of range, so an invalid index never throws or falls back to another stream.
+static AVAssetTrack *ILABTrackAtIndex(NSArray<AVAssetTrack *> *tracks, NSInteger index) {
+    return (index >= 0 && index < (NSInteger)tracks.count) ? tracks[index] : nil;
+}
 
 @implementation ILABTranscodeSession
 
@@ -55,6 +62,10 @@ typedef void(^ILABGenerateAssetBlock)(BOOL isSuccess, AVAsset *asset, NSError *e
 }
 
 -(instancetype)initWithAsset:(AVAsset *)sourceAsset timeRange:(CMTimeRange)timeRange {
+    return [self initWithAsset:sourceAsset timeRange:timeRange videoTrackIndex:0 audioTrackIndex:ILABAudioTrackIndexAll];
+}
+
+-(instancetype)initWithAsset:(AVAsset *)sourceAsset timeRange:(CMTimeRange)timeRange videoTrackIndex:(NSInteger)videoTrackIndex audioTrackIndex:(NSInteger)audioTrackIndex {
     self = [super init];
     if (self) {
         CMTime endTime = CMTimeAdd(timeRange.start, timeRange.duration);
@@ -68,16 +79,20 @@ typedef void(^ILABGenerateAssetBlock)(BOOL isSuccess, AVAsset *asset, NSError *e
         
         self.timeRange = timeRange;
         self.sourceAsset = sourceAsset;
+        self.videoTrackIndex = videoTrackIndex;
+        self.audioTrackIndex = audioTrackIndex;
         self.exportSession = nil;
         self.deleteCacheFile = YES;
         self.showDebug = NO;
 
-        AVAssetTrack *track = [sourceAsset tracksWithMediaType:AVMediaTypeVideo].firstObject;
+        AVAssetTrack *track = ILABTrackAtIndex([sourceAsset tracksWithMediaType:AVMediaTypeVideo], videoTrackIndex);
         AVMutableComposition *videoComposition = [AVMutableComposition composition];
         AVMutableCompositionTrack *vTrack = [videoComposition
                                              addMutableTrackWithMediaType:AVMediaTypeVideo
                                              preferredTrackID:kCMPersistentTrackID_Invalid];
-        [vTrack insertTimeRange:timeRange ofTrack:track atTime:kCMTimeZero error:nil];
+        if (track) {
+            [vTrack insertTimeRange:timeRange ofTrack:track atTime:kCMTimeZero error:nil];
+        }
         self.transcodingVideoAsset = videoComposition;
         
         [self configureSourceMeta];
@@ -91,8 +106,10 @@ typedef void(^ILABGenerateAssetBlock)(BOOL isSuccess, AVAsset *asset, NSError *e
         self.size = self.sourceSize;
         self.frameRate = self.sourceFPS;
         CMFormatDescriptionRef ref = (__bridge CMFormatDescriptionRef)([track.formatDescriptions firstObject]);
-        self.sourceCodecType = CMFormatDescriptionGetMediaSubType(ref);
-        self.containsAlphaChannel = CMFormatDescriptionGetExtension(ref, kCMFormatDescriptionExtension_ContainsAlphaChannel) != NULL;
+        if (ref) {
+            self.sourceCodecType = CMFormatDescriptionGetMediaSubType(ref);
+            self.containsAlphaChannel = CMFormatDescriptionGetExtension(ref, kCMFormatDescriptionExtension_ContainsAlphaChannel) != NULL;
+        }
     }
     return self;
 }
@@ -105,6 +122,12 @@ typedef void(^ILABGenerateAssetBlock)(BOOL isSuccess, AVAsset *asset, NSError *e
 
 +(instancetype)transcodeSessionWithAsset:(AVAsset *)sourceAsset timeRange:(CMTimeRange)timeRange outputURL:(NSURL *)outputURL {
     ILABTranscodeSession *session = [[[self class] alloc] initWithAsset:sourceAsset timeRange:timeRange];
+    session.outputURL = outputURL;
+    return session;
+}
+
++(instancetype)transcodeSessionWithAsset:(AVAsset *)sourceAsset timeRange:(CMTimeRange)timeRange videoTrackIndex:(NSInteger)videoTrackIndex audioTrackIndex:(NSInteger)audioTrackIndex outputURL:(NSURL *)outputURL {
+    ILABTranscodeSession *session = [[[self class] alloc] initWithAsset:sourceAsset timeRange:timeRange videoTrackIndex:videoTrackIndex audioTrackIndex:audioTrackIndex];
     session.outputURL = outputURL;
     return session;
 }
@@ -124,7 +147,7 @@ typedef void(^ILABGenerateAssetBlock)(BOOL isSuccess, AVAsset *asset, NSError *e
         
         NSArray<AVAssetTrack *> *videos = [weakSelf.sourceAsset tracksWithMediaType:AVMediaTypeVideo];
         NSArray<AVAssetTrack *> *audios = [weakSelf.sourceAsset tracksWithMediaType:AVMediaTypeAudio];
-        AVAssetTrack *video = videos.firstObject;
+        AVAssetTrack *video = ILABTrackAtIndex(videos, weakSelf.videoTrackIndex);
         
         weakSelf.sourceDuration = weakSelf.sourceAsset.duration;
         weakSelf.sourceVideoTracks = videos.count;
@@ -187,6 +210,13 @@ typedef void(^ILABGenerateAssetBlock)(BOOL isSuccess, AVAsset *asset, NSError *e
 
 #pragma mark - Transcode Session
 
+// Video index 0 and sources without audio keep the legacy paths (no video track / no-audio output).
+-(BOOL)hasValidTrackIndexes {
+    BOOL videoValid = self.videoTrackIndex == 0 || (self.videoTrackIndex > 0 && self.videoTrackIndex < self.sourceVideoTracks);
+    BOOL audioValid = self.sourceAudioTracks == 0 || self.audioTrackIndex == ILABAudioTrackIndexAll || (self.audioTrackIndex >= 0 && self.audioTrackIndex < self.sourceAudioTracks);
+    return videoValid && audioValid;
+}
+
 -(void)transcodeAsynchronously:(ILABProgressBlock)progressBlock complete:(ILABCompleteBlock)completeBlock {
     // Make sure the output URL has been specified
     if (!self.outputURL) {
@@ -206,6 +236,12 @@ typedef void(^ILABGenerateAssetBlock)(BOOL isSuccess, AVAsset *asset, NSError *e
             }
             return;
         }
+    }
+    if (![self hasValidTrackIndexes]) {
+        if (completeBlock) {
+            completeBlock(NO, [NSError ILABSessionError:ILABSessionErrorInvalidTrackIndex]);
+        }
+        return;
     }
     if (self.showDebug) {
         NSLog(@"transcode containsHDRVideo: %d, isProResType: %d", self.containsHDRVideo, self.isProResType);
@@ -357,7 +393,7 @@ typedef void(^ILABGenerateAssetBlock)(BOOL isSuccess, AVAsset *asset, NSError *e
     __block BOOL result = NO;
     __block NSError *_error = nil;
     
-    self.audioExporter = [[ILABAudioTrackExporter alloc] initWithAsset:self.sourceAsset trackIndex:0 timeRange:self.timeRange];
+    self.audioExporter = [[ILABAudioTrackExporter alloc] initWithAsset:self.sourceAsset trackIndex:self.audioTrackIndex timeRange:self.timeRange];
     
     dispatch_async([[self class] transcodeGenerateQueue], ^{
         [weakSelf.audioExporter exportInM4ATo:destinationURL

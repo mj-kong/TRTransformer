@@ -22,6 +22,8 @@ NS_ASSUME_NONNULL_BEGIN
 @property (readonly) float sourceEstimatedDataRate;                 /**< Source estimated data rate, in bits per second */
 @property (readonly) CGAffineTransform sourceTransform;             /**< Source transform */
 @property (readonly) CGSize sourceSize;                             /**< Natural size of the source asset */
+@property (readonly) NSInteger videoTrackIndex;                     /**< 0-based index into the source's video tracks to use, default 0 */
+@property (readonly) NSInteger audioTrackIndex;                     /**< 0-based audio track to use alone, or ILABAudioTrackIndexAll (default) to mix every audio track */
 
 @property (assign, nonatomic) BOOL showDebug;                       /**< Show debug output messages when reversing */
 @property (nonatomic, strong) NSURL *outputURL;                     /**< URL to output transcoded video to */
@@ -58,6 +60,12 @@ NS_ASSUME_NONNULL_BEGIN
 -(instancetype)initWithAsset:(AVAsset *)sourceAsset timeRange:(CMTimeRange)timeRange;
 
 /**
+ Create a new instance that reads the given video and audio streams (0-based, per media type); an audio index uses only that stream,
+ ILABAudioTrackIndexAll mixes every audio stream (what the other inits do). An out-of-range index fails the transcode with ILABSessionErrorInvalidTrackIndex.
+ */
+-(instancetype)initWithAsset:(AVAsset *)sourceAsset timeRange:(CMTimeRange)timeRange videoTrackIndex:(NSInteger)videoTrackIndex audioTrackIndex:(NSInteger)audioTrackIndex;
+
+/**
  Creates a new session
 
  @param sourceVideoURL The source URL
@@ -75,6 +83,11 @@ NS_ASSUME_NONNULL_BEGIN
  @return The new instance
  */
 +(instancetype)transcodeSessionWithAsset:(AVAsset *)sourceAsset timeRange:(CMTimeRange)timeRange outputURL:(NSURL *)outputURL;
+
+/**
+ Creates a new session that reads the given video and audio streams (0-based, per media type, or ILABAudioTrackIndexAll).
+ */
++(instancetype)transcodeSessionWithAsset:(AVAsset *)sourceAsset timeRange:(CMTimeRange)timeRange videoTrackIndex:(NSInteger)videoTrackIndex audioTrackIndex:(NSInteger)audioTrackIndex outputURL:(NSURL *)outputURL;
 
 /**
  Start the transcode process asynchronously

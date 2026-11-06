@@ -24,6 +24,8 @@
 @property (readonly) float sourceFPS;                               /**< Maximum FPS of the source asset */
 @property (readonly) CGAffineTransform sourceTransform;             /**< Source transform */
 @property (readonly) CGSize sourceSize;                             /**< Natural size of the source asset */
+@property (readonly) NSInteger videoTrackIndex;                     /**< 0-based index into the source's video tracks to use, default 0 */
+@property (readonly) NSInteger audioTrackIndex;                     /**< 0-based audio track to reverse, default 0; ILABAudioTrackIndexAll is treated as 0 */
 
 @property (assign, nonatomic) BOOL showDebug;                       /**< Show debug output messages when reversing */
 @property (assign, nonatomic) NSInteger samplesPerPass;             /**< Samples per pass when reversing video */
@@ -47,6 +49,12 @@
  @return The new instance
  */
 -(instancetype)initWithAsset:(AVAsset *)sourceAsset timeRange:(CMTimeRange)timeRange;
+
+/**
+ Create a new instance that reverses the given video and audio streams (0-based, per media type) instead of the first ones.
+ ILABAudioTrackIndexAll is treated as audio stream 0 (reverse never mixed). An out-of-range index fails the export with ILABSessionErrorInvalidTrackIndex.
+ */
+-(instancetype)initWithAsset:(AVAsset *)sourceAsset timeRange:(CMTimeRange)timeRange videoTrackIndex:(NSInteger)videoTrackIndex audioTrackIndex:(NSInteger)audioTrackIndex;
 
 /**
  Creates a new instance
@@ -74,6 +82,11 @@
  @return The new instance
  */
 +(instancetype)exportSessionWithAsset:(AVAsset *)sourceAsset timeRange:(CMTimeRange)timeRange outputURL:(NSURL *)outputURL;
+
+/**
+ Creates a new export session that reverses the given video and audio streams (0-based, per media type).
+ */
++(instancetype)exportSessionWithAsset:(AVAsset *)sourceAsset timeRange:(CMTimeRange)timeRange videoTrackIndex:(NSInteger)videoTrackIndex audioTrackIndex:(NSInteger)audioTrackIndex outputURL:(NSURL *)outputURL;
 
 /**
  Start the export process asynchronously

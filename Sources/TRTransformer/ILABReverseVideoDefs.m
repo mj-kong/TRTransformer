@@ -9,6 +9,7 @@
 #import <AVFoundation/AVFoundation.h>
 
 NSString * const kILABReverseVideoExportSessionErrorDomain = @"kILABReverseVideoExportSessionErrorDomain";
+NSInteger const ILABAudioTrackIndexAll = -1;
 
 @implementation NSError(ILABReverseVideoExportSession)
 
@@ -43,6 +44,9 @@ NSString * const kILABReverseVideoExportSessionErrorDomain = @"kILABReverseVideo
             return [NSError errorWithDomain:kILABReverseVideoExportSessionErrorDomain code:errorStatus userInfo:@{NSLocalizedDescriptionKey: @"Cannout add output for audio export."}];
         case ILABSessionErrorNoCompleteAudioExport:
             return [NSError errorWithDomain:kILABReverseVideoExportSessionErrorDomain code:errorStatus userInfo:@{NSLocalizedDescriptionKey: @"Export is already in progress."}];
+
+        case ILABSessionErrorInvalidTrackIndex:
+            return [NSError errorWithDomain:kILABReverseVideoExportSessionErrorDomain code:errorStatus userInfo:@{NSLocalizedDescriptionKey: @"The requested video or audio track index is out of range."}];
     }
 }
 

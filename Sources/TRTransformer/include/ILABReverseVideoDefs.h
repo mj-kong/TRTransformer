@@ -10,6 +10,9 @@
 
 extern NSString * const kILABReverseVideoExportSessionErrorDomain;
 
+/** audioTrackIndex value that mixes every audio track into one (the pre-1.12.19 Transcode behaviour). */
+extern NSInteger const ILABAudioTrackIndexAll;
+
 typedef enum : NSInteger {
     ILABSessionErrorMissingOutputURL                = -101,
     ILABSessionErrorAVAssetReaderStartReading       = -102,
@@ -27,6 +30,7 @@ typedef enum : NSInteger {
     ILABSessionErrorAudioCanAddOutput               = -203,
     ILABSessionErrorNoCompleteAudioExport           = -204,
     
+    ILABSessionErrorInvalidTrackIndex               = -301,   /**< Requested video/audio track index is out of range for the source */
 } ILABSessionError;
 
 /**

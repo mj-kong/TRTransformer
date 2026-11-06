@@ -35,9 +35,16 @@
 @property (nonatomic) BOOL isDolbyVisionType;
 @property (nonatomic) BOOL containsAlphaChannel;
 @property (nonatomic) CMVideoCodecType sourceCodecType;
+@property (nonatomic) NSInteger videoTrackIndex;
+@property (nonatomic) NSInteger audioTrackIndex;
 @end
 
 typedef void(^ILABGenerateAssetBlock)(BOOL isSuccess, AVAsset *asset, NSError *error);
+
+// nil when out of range, so an invalid index never throws or falls back to another stream.
+static AVAssetTrack *ILABTrackAtIndex(NSArray<AVAssetTrack *> *tracks, NSInteger index) {
+    return (index >= 0 && index < (NSInteger)tracks.count) ? tracks[index] : nil;
+}
 
 @implementation ILABReverseVideoExportSession
 
@@ -56,6 +63,10 @@ typedef void(^ILABGenerateAssetBlock)(BOOL isSuccess, AVAsset *asset, NSError *e
 }
 
 -(instancetype)initWithAsset:(AVAsset *)sourceAsset timeRange:(CMTimeRange)timeRange {
+    return [self initWithAsset:sourceAsset timeRange:timeRange videoTrackIndex:0 audioTrackIndex:0];
+}
+
+-(instancetype)initWithAsset:(AVAsset *)sourceAsset timeRange:(CMTimeRange)timeRange videoTrackIndex:(NSInteger)videoTrackIndex audioTrackIndex:(NSInteger)audioTrackIndex {
     self = [super init];
     if (self) {
         CMTime endTime = CMTimeAdd(timeRange.start, timeRange.duration);
@@ -69,18 +80,22 @@ typedef void(^ILABGenerateAssetBlock)(BOOL isSuccess, AVAsset *asset, NSError *e
 
         self.timeRange = timeRange;
         self.sourceAsset = sourceAsset;
+        self.videoTrackIndex = videoTrackIndex;
+        self.audioTrackIndex = audioTrackIndex;
         self.exportSession = nil;
         self.audioExporter = nil;
         self.deleteCacheFile = YES;
         self.showDebug = NO;
         self.samplesPerPass = 40;
 
-        AVAssetTrack *track = [sourceAsset tracksWithMediaType:AVMediaTypeVideo].firstObject;
+        AVAssetTrack *track = ILABTrackAtIndex([sourceAsset tracksWithMediaType:AVMediaTypeVideo], videoTrackIndex);
         AVMutableComposition *videoComposition = [AVMutableComposition composition];
         AVMutableCompositionTrack *vTrack = [videoComposition
                                              addMutableTrackWithMediaType:AVMediaTypeVideo
                                              preferredTrackID:kCMPersistentTrackID_Invalid];
-        [vTrack insertTimeRange:timeRange ofTrack:track atTime:kCMTimeZero error:nil];
+        if (track) {
+            [vTrack insertTimeRange:timeRange ofTrack:track atTime:kCMTimeZero error:nil];
+        }
         self.reversingVideoAsset = videoComposition;
         
         [self configureSourceMeta];
@@ -92,8 +107,10 @@ typedef void(^ILABGenerateAssetBlock)(BOOL isSuccess, AVAsset *asset, NSError *e
         self.isProResType = isProResType(track);
         self.isDolbyVisionType = isDolbyVisionType(track);
         CMFormatDescriptionRef ref = (__bridge CMFormatDescriptionRef)([track.formatDescriptions firstObject]);
-        self.sourceCodecType = CMFormatDescriptionGetMediaSubType(ref);
-        self.containsAlphaChannel = CMFormatDescriptionGetExtension(ref, kCMFormatDescriptionExtension_ContainsAlphaChannel) != NULL;
+        if (ref) {
+            self.sourceCodecType = CMFormatDescriptionGetMediaSubType(ref);
+            self.containsAlphaChannel = CMFormatDescriptionGetExtension(ref, kCMFormatDescriptionExtension_ContainsAlphaChannel) != NULL;
+        }
    }
     return self;
 }
@@ -106,6 +123,12 @@ typedef void(^ILABGenerateAssetBlock)(BOOL isSuccess, AVAsset *asset, NSError *e
 
 +(instancetype)exportSessionWithAsset:(AVAsset *)sourceAsset timeRange:(CMTimeRange)timeRange outputURL:(NSURL *)outputURL {
     ILABReverseVideoExportSession *session = [[[self class] alloc] initWithAsset:sourceAsset timeRange:timeRange];
+    session.outputURL = outputURL;
+    return session;
+}
+
++(instancetype)exportSessionWithAsset:(AVAsset *)sourceAsset timeRange:(CMTimeRange)timeRange videoTrackIndex:(NSInteger)videoTrackIndex audioTrackIndex:(NSInteger)audioTrackIndex outputURL:(NSURL *)outputURL {
+    ILABReverseVideoExportSession *session = [[[self class] alloc] initWithAsset:sourceAsset timeRange:timeRange videoTrackIndex:videoTrackIndex audioTrackIndex:audioTrackIndex];
     session.outputURL = outputURL;
     return session;
 }
@@ -125,7 +148,7 @@ typedef void(^ILABGenerateAssetBlock)(BOOL isSuccess, AVAsset *asset, NSError *e
         
         NSArray<AVAssetTrack *> *videos = [weakSelf.sourceAsset tracksWithMediaType:AVMediaTypeVideo];
         NSArray<AVAssetTrack *> *audios = [weakSelf.sourceAsset tracksWithMediaType:AVMediaTypeAudio];
-        AVAssetTrack *video = videos.firstObject;
+        AVAssetTrack *video = ILABTrackAtIndex(videos, weakSelf.videoTrackIndex);
         
         weakSelf.sourceDuration = weakSelf.sourceAsset.duration;
         weakSelf.sourceVideoTracks = videos.count;
@@ -191,6 +214,13 @@ typedef void(^ILABGenerateAssetBlock)(BOOL isSuccess, AVAsset *asset, NSError *e
 
 #pragma mark - Reverse Session
 
+// Video index 0 and sources without audio keep the legacy paths (no video track / no-audio output).
+-(BOOL)hasValidTrackIndexes {
+    BOOL videoValid = self.videoTrackIndex == 0 || (self.videoTrackIndex > 0 && self.videoTrackIndex < self.sourceVideoTracks);
+    BOOL audioValid = self.sourceAudioTracks == 0 || self.audioTrackIndex == ILABAudioTrackIndexAll || (self.audioTrackIndex >= 0 && self.audioTrackIndex < self.sourceAudioTracks);
+    return videoValid && audioValid;
+}
+
 -(void)exportAsynchronously:(ILABProgressBlock)progressBlock complete:(ILABCompleteBlock)completeBlock {
     // Make sure the output URL has been specified
     if (!self.outputURL) {
@@ -210,6 +240,12 @@ typedef void(^ILABGenerateAssetBlock)(BOOL isSuccess, AVAsset *asset, NSError *e
             }
             return;
         }
+    }
+    if (![self hasValidTrackIndexes]) {
+        if (completeBlock) {
+            completeBlock(NO, [NSError ILABSessionError:ILABSessionErrorInvalidTrackIndex]);
+        }
+        return;
     }
     if (self.showDebug) {
         NSLog(@"reverse containsHDRVideo: %d, isProResType: %d", self.containsHDRVideo, self.isProResType);
@@ -357,7 +393,9 @@ typedef void(^ILABGenerateAssetBlock)(BOOL isSuccess, AVAsset *asset, NSError *e
 -(void)reversingAudioAtDestinationURL:(NSURL *)destinationURL completBlock:(ILABGenerateAssetBlock)resultsBlock {
     __weak typeof(self) weakSelf = self;
     
-    self.audioExporter = [[ILABAudioTrackExporter alloc] initWithAsset:self.sourceAsset trackIndex:0 timeRange:self.timeRange];
+    self.audioExporter = [[ILABAudioTrackExporter alloc] initWithAsset:self.sourceAsset
+                                                           trackIndex:(self.audioTrackIndex == ILABAudioTrackIndexAll ? 0 : self.audioTrackIndex)
+                                                            timeRange:self.timeRange];
 
     dispatch_async([[self class] reverseGenerateQueue], ^{
 
@@ -378,7 +416,8 @@ typedef void(^ILABGenerateAssetBlock)(BOOL isSuccess, AVAsset *asset, NSError *e
 }
 
 -(void)convertToM4ATypeAtDestinationURL:(NSURL *)destinationURL asset:(AVAsset *)asset completeBlcok:(ILABCompleteBlock)completeBlock {
-    self.audioExporter = [[ILABAudioTrackExporter alloc] initWithAsset:asset trackIndex:0];
+    // asset is the single-track reversed WAV; All keeps the previous whole-composition M4A export.
+    self.audioExporter = [[ILABAudioTrackExporter alloc] initWithAsset:asset trackIndex:ILABAudioTrackIndexAll];
     
     __weak typeof(self) weakSelf = self;
    [self.audioExporter exportInM4ATo:destinationURL

@@ -89,7 +89,7 @@
 #pragma mark - Init/Dealloc
 -(instancetype)initWithAsset:(AVAsset *)sourceAsset trackIndex:(NSInteger)trackIndex {
     return [self initWithAsset:sourceAsset
-                    trackIndex:0
+                    trackIndex:trackIndex
                      timeRange:CMTimeRangeMake(kCMTimeZero, sourceAsset.duration)];
 }
 
@@ -134,11 +134,25 @@
 
 #pragma mark - Audio Export Methods
 - (void)exportInM4ATo:(NSURL *)outputURL completion:(ILABCompleteBlock)completion {
-    self.exportSession = [[AVAssetExportSession alloc] initWithAsset:self.exportingAudioAsset
+    AVAsset *asset = self.exportingAudioAsset;
+    // ILABAudioTrackIndexAll exports the composition of every audio track (mixed); an index exports only that track.
+    if (self.trackIndex != ILABAudioTrackIndexAll) {
+        NSArray<AVAssetTrack *> *tracks = [self.exportingAudioAsset tracksWithMediaType:AVMediaTypeAudio];
+        if (self.trackIndex < 0 || self.trackIndex >= (NSInteger)tracks.count) {
+            completion(NO, [NSError ILABSessionError:ILABSessionErrorAudioInvalidTrackIndex]);
+            return;
+        }
+        AVAssetTrack *track = tracks[self.trackIndex];
+        AVMutableComposition *singleComp = [AVMutableComposition composition];
+        [[singleComp addMutableTrackWithMediaType:AVMediaTypeAudio preferredTrackID:kCMPersistentTrackID_Invalid]
+         insertTimeRange:track.timeRange ofTrack:track atTime:kCMTimeZero error:nil];
+        asset = singleComp;
+    }
+    self.exportSession = [[AVAssetExportSession alloc] initWithAsset:asset
                                                           presetName:AVAssetExportPresetAppleM4A];
     self.exportSession.outputURL = outputURL;
     self.exportSession.outputFileType = AVFileTypeAppleM4A;
-    self.exportSession.timeRange = CMTimeRangeMake(kCMTimeZero, [self.exportingAudioAsset duration]);
+    self.exportSession.timeRange = CMTimeRangeMake(kCMTimeZero, [asset duration]);
     
     __weak typeof(self) weakSelf = self;
     [self.exportSession exportAsynchronouslyWithCompletionHandler:^{
@@ -181,7 +195,13 @@
         completeBlock(NO, error);
         return;
     }
-    AVAssetTrack *track = [self.exportingAudioAsset tracksWithMediaType:AVMediaTypeAudio][self.trackIndex];
+    NSArray<AVAssetTrack *> *tracks = [self.exportingAudioAsset tracksWithMediaType:AVMediaTypeAudio];
+    if (self.trackIndex < 0 || self.trackIndex >= (NSInteger)tracks.count) {
+        self.lastError = [NSError ILABSessionError:ILABSessionErrorAudioInvalidTrackIndex];
+        completeBlock(NO, self.lastError);
+        return;
+    }
+    AVAssetTrack *track = tracks[self.trackIndex];
 
     self.assetReaderOutput = [AVAssetReaderTrackOutput assetReaderTrackOutputWithTrack:track
                                                                         outputSettings:[track decompressionAudioSettingForPCMType]];
